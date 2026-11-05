@@ -34,7 +34,17 @@ jobs:
       - name: TypeScript and Vite
         run: npm run build
       - name: Package Windows installer
-        run: npx electron-builder --win nsis --publish never
+        shell: pwsh
+        run: |
+          # Electron-builder fetches NSIS from GitHub releases; temporary HTTP 504s
+          # must not fail the entire release on the first attempt.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            Write-Host "NSIS package attempt $attempt / 3"
+            npx electron-builder --win nsis --publish never
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($attempt -lt 3) { Start-Sleep -Seconds 12 }
+          }
+          exit 1
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
