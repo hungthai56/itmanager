@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import type {FormEvent} from 'react';
-import {AlertTriangle,CalendarRange,CheckCircle2,ChevronLeft,ChevronRight,Clock3,History,ListChecks,Plus,Save,Trash2,X} from 'lucide-react';
+import {AlertTriangle,CalendarRange,Check,CheckCircle2,ChevronLeft,ChevronRight,Clock3,History,ListChecks,Plus,Save,Trash2,X} from 'lucide-react';
 import type {RecordItem,Site,ModuleId} from './types';
 
 type Notify=(message:string,error?:boolean)=>void;
