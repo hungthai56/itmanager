@@ -7,7 +7,7 @@ import {
   CalendarDays,CheckCircle2,ChevronDown,ChevronRight,ClipboardList,Clock3,CloudOff,
   Database,FilePlus2,FileText,Filter,FolderKanban,HardDrive,History,KeyRound,
   LayoutDashboard,LogOut,Menu,Pencil,Plus,Printer,RefreshCw,
-  Save,Search,Settings2,ShieldCheck,SlidersHorizontal,Trash2,Upload,Users,Wallet,X,Command,Keyboard,Check
+  Save,Search,Settings2,ShieldCheck,SlidersHorizontal,Trash2,Upload,Users,Wallet,X,Keyboard,Check
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import {ChecklistBoard,RosterCalendar,ProjectRegistry,RecordHistory} from './OperationsBoards';
