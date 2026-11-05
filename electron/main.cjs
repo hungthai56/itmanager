@@ -33,6 +33,12 @@ async function dispatch(action,p){
     case 'records.list':return store.recordsList(p);
     case 'records.save':return store.recordsSave(p);
     case 'records.delete':return store.recordsDelete(p);
+    case 'records.history':return store.recordsHistory(p);
+    case 'checklist.mark':return store.checklistMark(p);
+    case 'roster.batch':return store.rosterBatch(p);
+    case 'project.tasks.list':return store.projectTasksList(p);
+    case 'project.tasks.save':return store.projectTaskSave(p);
+    case 'project.tasks.delete':return store.projectTaskDelete(p);
     case 'dashboard.get':return store.dashboard(p.siteId);
     case 'settings.get':return store.settingsGet();
     case 'settings.save':return store.settingsSave(p);

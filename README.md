@@ -1,6 +1,6 @@
 # Lotus IT Command — Hotel IT Operations Desktop
 
-**Version 0.1.0 · Electron + React + TypeScript + SQLite (sql.js)**
+**Version 0.2.0 · Electron + React + TypeScript + SQLite (sql.js)**
 
 Đây là **bản nền tảng chạy offline cho một máy Windows**, phát triển theo danh sách chức năng video do người dùng cung cấp. Không phải bản sao 1:1 đã hoàn thiện. Những điểm đã có và chưa có được ghi rõ bên dưới.
 
@@ -24,10 +24,25 @@ Yêu cầu: Windows 10/11 x64, **Node.js 22 LTS** và Internet cho lần tải d
    npm run dist:win
    ```
 
-4. File cài đặt được tạo trong `release/Lotus-IT-Command-Setup-0.1.0.exe` (sau khi build thành công).
+4. File cài đặt được tạo trong `release/Lotus-IT-Command-Setup-0.2.0.exe` (sau khi build thành công).
 5. Lần mở đầu tiên: tạo tài khoản quản trị **SYS** bằng mật khẩu ít nhất **10 ký tự** chứa chữ và số. Không có tài khoản/mật khẩu mặc định.
 
 > **Lưu ý:** Windows Defender/SmartScreen có thể cảnh báo ứng dụng chưa có chứng chỉ ký số. Không tắt antivirus để cài. Hãy kiểm tra mã nguồn và chỉ chạy bản build do bạn tin cậy.
+
+
+## Nâng cấp theo video demo (0.2.0)
+
+Các chức năng sau đã được triển khai thêm trong bản 0.2.0:
+
+- **Checklist board:** hiển thị mẫu cấu hình theo Daily / Weekly / Monthly / Quarterly / Semiannual / Yearly / Custom và ngày chọn; thao tác Done / Not Done trực tiếp, bắt buộc nhập lý do khi Not Done; ghi họ tên + thời điểm người kiểm tra; mỗi mẫu chỉ có một kết quả trong kỳ, sửa kết quả tạo lịch sử. **Lưu ý:** đây là bảng checklist theo lịch khi người dùng mở app, không phải scheduler chạy nền.
+- **Roster calendar:** lưới tháng theo nhân viên/ngày, kéo để chọn các ngày liên tiếp và gán ca hàng loạt; backend cập nhật bản ghi cũ thay vì tạo ca trùng, tự tra hệ số công theo cấu hình.
+- **Project Task Registry:** danh sách đầu việc thuộc từng dự án; tên việc, người phụ trách, hạn, trạng thái, ghi chú; tự cập nhật tiến độ dự án bằng % đầu việc Done.
+- **Record History:** lưu snapshot trước/sau mỗi lần sửa, ngày giờ và người thao tác; xem được tại bảng bằng biểu tượng đồng hồ lịch sử.
+- **Inventory:** từ chối mã thiết bị trùng nhau trong cùng một cơ sở, kể cả khác hoa/thường.
+- **Backend authorization:** tất cả tính năng mới đều được kiểm tra vai trò và phạm vi Site trong Electron; dữ liệu bổ sung nằm trong SQLite, tự tạo bảng mới khi nâng cấp từ bản trước.
+- **Kiểm thử:** test cho checklist kỳ, phân ca gán hàng loạt, tiến độ dự án, lịch sử dữ liệu, cách ly giữa các site.
+
+**Chưa có:** server đồng bộ nhiều máy, QR URL truy cập bằng điện thoại, checklist scheduler tự chạy khi tắt app, multi-database vật lý. Đừng sử dụng SQLite trên NAS/OneDrive như database ghi chung.
 
 ## Đã triển khai (0.1.0)
 
@@ -85,4 +100,4 @@ npm run build    # TypeScript + Vite renderer
 npm run dist:win # Windows Installer
 ```
 
-**Ghi chú chất lượng:** Các file đã được kiểm tra cú pháp trong môi trường soạn thảo. Chưa xác nhận chạy thử được trên Windows cho đến khi cài dependencies và hoàn tất CI/build. Không sử dụng cho vận hành production trước khi test và chuẩn bị kế hoạch backup/restore.
+**Ghi chú chất lượng:** Các file đã được kiểm tra cú pháp trong môi trường soạn thảo. GitHub Actions sẽ chạy kiểm thử, kiểm tra TypeScript và đóng gói Windows cho từng commit. Cần kiểm tra thủ công trên máy Windows trước khi triển khai vận hành. Không sử dụng cho vận hành production trước khi test và chuẩn bị kế hoạch backup/restore.

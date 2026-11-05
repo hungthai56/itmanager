@@ -1,6 +1,6 @@
 # Đối chiếu tính năng theo bản ghi người dùng cung cấp
 
-| Module | 0.1.0 | Còn thiếu so với video |
+| Module | 0.2.0 | Còn thiếu so với video |
 |---|---|---|
 | Login | Onboarding, scrypt, khóa tạm thời | Xác thực tập trung/AD, IP thật |
 | Cluster | Site switching, tổng hợp vài KPI | Đủ 9 biểu đồ |
@@ -22,4 +22,13 @@
 | Projects | CRUD, progress, milestone text | Task Registry thực thụ |
 | Knowledge | Documents / Tutorials nội dung text | Rich text, PDF export, site sharing nâng cao |
 
-**Nguồn:** bản ghi chức năng do người dùng tải lên, không phải bản sao video trực tiếp được xác minh. Bản 0.1.0 là nền tảng triển khai theo giai đoạn, không quảng cáo là 1:1.
+**Nguồn:** bản ghi chức năng do người dùng tải lên, không phải bản sao video trực tiếp được xác minh. Bản 0.2.0 là nền tảng triển khai theo giai đoạn, không quảng cáo là 1:1.
+
+## Video demo 10:35 — thay đổi v0.2.0
+- Checklist: bổ sung board theo lịch và ghi nhận người thực hiện, Not Done bắt nhập lý do.
+- Roster: bổ sung lưới ca, kéo chọn nhiều ngày và gán ca ở backend trong một transaction.
+- Inventory: lịch sử thay đổi record và kiểm tra mã tài sản duy nhất.
+- Projects: bổ sung Task Registry có bảng riêng, tự cập nhật % hoàn thành.
+- Tất cả module: xem lịch sử thay đổi từ các lần save sau khi nâng cấp.
+
+Chưa triển khai: multi-PC sync/server API, mobile QR read-only, scheduler hoạt động nền, native database per-site.

@@ -17,6 +17,21 @@ const READ_DEFAULT = {
 };
 const uuid = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
+const isoDay = value => typeof value==='string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value+'T00:00:00Z')) && new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
+function periodKey(date, frequency) {
+  if(!isoDay(date))throw new Error('Ngày không hợp lệ (YYYY-MM-DD).');
+  if(frequency==='Weekly') {
+    const monday=new Date(date+'T00:00:00Z');monday.setUTCDate(monday.getUTCDate()-(monday.getUTCDay()+6)%7);
+    return monday.toISOString().slice(0,10);
+  }
+  if(frequency==='Monthly')return date.slice(0,7);
+  if(frequency==='Quarterly')return date.slice(0,4)+'-Q'+(Math.floor((Number(date.slice(5,7))-1)/3)+1);
+  if(frequency==='Semiannual')return date.slice(0,4)+'-H'+(Number(date.slice(5,7))<=6?'1':'2');
+  if(frequency==='Yearly')return date.slice(0,4);
+  return date;
+}
+const DEFAULT_SHIFTS=[{code:'D',factor:1},{code:'N',factor:1},{code:'HD',factor:.5},{code:'AL',factor:1},{code:'DO',factor:0}];
+const DEFAULT_CHECKLISTS=[{name:'Kiểm tra Backup',frequency:'Daily'},{name:'Kiểm tra NAS / Server',frequency:'Daily'}];
 const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) => ({salt, hash: crypto.scryptSync(password, salt, 64).toString('hex')});
 const secureCompare = (a,b) => {
   const aa = Buffer.from(a || '', 'hex'), bb = Buffer.from(b || '', 'hex');
@@ -40,7 +55,14 @@ class Store {
     CREATE TABLE IF NOT EXISTS role_permissions(role TEXT NOT NULL,module TEXT NOT NULL,can_read INTEGER NOT NULL,can_write INTEGER NOT NULL,PRIMARY KEY(role,module));`);
     for (const role of ROLES) for (const mod of MODULES) this.db.run('INSERT OR IGNORE INTO role_permissions VALUES(?,?,?,?)',[role,mod,READ_DEFAULT[role].includes(mod)?1:0,WRITE_DEFAULT[role].includes(mod)?1:0]);
     if (!this.one('SELECT id FROM sites LIMIT 1')) this.db.run('INSERT INTO sites VALUES(?,?,?,?,?)',[uuid(),'GLG','Golden Lotus Grand Hotel','VND',now()]);
+    this.ensureUpgradeTables();
     this.persist();
+  }
+  ensureUpgradeTables(){
+    this.db.run(`CREATE TABLE IF NOT EXISTS record_history(id TEXT PRIMARY KEY,record_id TEXT NOT NULL,site_id TEXT NOT NULL,module TEXT NOT NULL,action TEXT NOT NULL,before_data TEXT,after_data TEXT,username TEXT,created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS history_record_scope ON record_history(record_id,site_id,module,created_at);
+    CREATE TABLE IF NOT EXISTS project_tasks(id TEXT PRIMARY KEY,site_id TEXT NOT NULL,project_id TEXT NOT NULL,title TEXT NOT NULL,owner TEXT,due_date TEXT,status TEXT NOT NULL,notes TEXT,created_by TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS project_tasks_scope ON project_tasks(site_id,project_id);`);
   }
   all(sql,p=[]) { const s=this.db.prepare(sql); try { s.bind(p); const a=[]; while(s.step()) a.push(s.getAsObject()); return a; } finally{s.free();} }
   one(sql,p=[]) { return this.all(sql,p)[0] || null; }
@@ -49,7 +71,7 @@ class Store {
   transact(fn) { this.db.run('BEGIN'); try { const res=fn(); this.db.run('COMMIT'); this.persist(); return res; } catch(e) {this.db.run('ROLLBACK');throw e;} }
   audit(action,site,details) {this.run('INSERT INTO audit VALUES(?,?,?,?,?,?,?)',[uuid(),this.session?.id??null,this.session?.username??null,action,site||null,JSON.stringify(details??{}),now()]);}
   get userCount() {return this.one('SELECT COUNT(*) n FROM users').n;}
-  info(){ return {ready:this.userCount>0, version:'0.1.0', dataPath:this.folder, modules:MODULES}; }
+  info(){ return {ready:this.userCount>0, version:'0.2.0', dataPath:this.folder, modules:MODULES}; }
   setup({name,username,password,siteName}) {
     if(this.userCount) throw new Error('Hệ thống đã được khởi tạo.');
     if(!name?.trim()||!username?.trim()||!siteName?.trim()||!passwordOkay(password)) throw new Error('Điền đủ thông tin. Mật khẩu phải từ 10 ký tự, có chữ và số.');
@@ -105,8 +127,134 @@ class Store {
   userPassword({userId,password}){this.requireAdmin();if(!passwordOkay(password))throw new Error('Mật khẩu tối thiểu 10 ký tự, chứa chữ và số.');const h=hashPassword(password);return this.transact(()=>{this.run('UPDATE users SET password_hash=?,salt=?,force_reset=1,failed_attempts=0,locked_until=NULL WHERE id=?',[h.hash,h.salt,userId]);this.audit('USER_PASSWORD_RESET',null,{userId});return{success:true};});}
   changePassword({oldPassword,newPassword}){this.requireAuth();if(!passwordOkay(newPassword))throw new Error('Mật khẩu mới tối thiểu 10 ký tự, gồm chữ và số.');const u=this.one('SELECT * FROM users WHERE id=?',[this.session.id]);const old=crypto.scryptSync(oldPassword||'',u.salt,64).toString('hex');if(!secureCompare(old,u.password_hash))throw new Error('Mật khẩu cũ không đúng.');const h=hashPassword(newPassword);return this.transact(()=>{this.run('UPDATE users SET password_hash=?,salt=?,force_reset=0 WHERE id=?',[h.hash,h.salt,u.id]);this.session.forceReset=false;this.audit('PASSWORD_CHANGED',null,{});return{success:true};});}
   recordsList({module,siteId}){this.check(module,siteId,'read');return this.all('SELECT * FROM records WHERE module=? AND site_id=? ORDER BY updated_at DESC',[module,siteId]).map(x=>({...x,data:JSON.parse(x.data)}));}
-  recordsSave({module,siteId,record}){this.check(module,siteId,'write');if(!record||typeof record.data!=='object'||Array.isArray(record.data))throw new Error('Dữ liệu không hợp lệ.');const raw=JSON.stringify(record.data);if(raw.length>200000)throw new Error('Nội dung vượt giới hạn lưu trữ.');if(!Object.values(record.data).some(x=>String(x??'').trim()))throw new Error('Hãy nhập ít nhất một thông tin.');if(module==='checklists'&&record.data.status==='Not Done'&&!String(record.data.reason||'').trim())throw new Error('Cần nhập lý do khi đánh dấu Not Done.');return this.transact(()=>{const id=record.id||uuid();const old=record.id?this.one('SELECT * FROM records WHERE id=? AND site_id=? AND module=?',[id,siteId,module]):null;if(record.id&&!old)throw new Error('Không tìm thấy bản ghi ở cơ sở này.');if(old&&this.session.role==='STAFF'&&old.created_by!==this.session.id)throw new Error('Nhân viên chỉ được sửa bản ghi của mình.');if(old)this.run('UPDATE records SET data=?,updated_at=? WHERE id=?',[raw,now(),id]);else this.run('INSERT INTO records VALUES(?,?,?,?,?,?,?)',[id,siteId,module,raw,this.session.id,now(),now()]);this.audit('RECORD_SAVE',siteId,{module,id});return {id};});}
-  recordsDelete({module,siteId,id}){this.check(module,siteId,'write');const old=this.one('SELECT * FROM records WHERE id=? AND module=? AND site_id=?',[id,module,siteId]);if(!old)throw new Error('Không tìm thấy bản ghi.');if(this.session.role==='STAFF'&&old.created_by!==this.session.id)throw new Error('Không được xóa bản ghi người khác.');return this.transact(()=>{this.run('DELETE FROM records WHERE id=? AND module=? AND site_id=?',[id,module,siteId]);this.audit('RECORD_DELETE',siteId,{module,id});return{success:true};});}
+  historyWrite({id,siteId,module,action,before,after}){
+    this.run('INSERT INTO record_history VALUES(?,?,?,?,?,?,?,?,?)',[uuid(),id,siteId,module,action,before||null,after||null,this.session.username,now()]);
+  }
+  recordsHistory({module,siteId,id}){
+    this.check(module,siteId,'read');
+    if(!id||typeof id!=='string')throw new Error('Thiếu mã bản ghi.');
+    const exists=this.one('SELECT id FROM records WHERE id=? AND module=? AND site_id=?',[id,module,siteId]);
+    if(!exists)throw new Error('Không tìm thấy bản ghi tại cơ sở này.');
+    return this.all('SELECT * FROM record_history WHERE record_id=? AND site_id=? AND module=? ORDER BY created_at DESC LIMIT 100',[id,siteId,module]);
+  }
+  recordsSave({module,siteId,record}){
+    this.check(module,siteId,'write');
+    if(!record||!record.data||typeof record.data!=='object'||Array.isArray(record.data))throw new Error('Dữ liệu không hợp lệ.');
+    const raw=JSON.stringify(record.data);
+    if(raw.length>200000)throw new Error('Nội dung vượt giới hạn lưu trữ.');
+    if(!Object.values(record.data).some(x=>String(x??'').trim()))throw new Error('Hãy nhập ít nhất một thông tin.');
+    if(module==='checklists'&&record.data.status==='Not Done'&&!String(record.data.reason||'').trim())throw new Error('Cần nhập lý do khi đánh dấu Not Done.');
+    if(module==='inventory'){
+      const code=String(record.data.assetCode||'').trim();if(!code)throw new Error('Cần nhập mã thiết bị.');
+      const duplicates=this.all('SELECT id,data FROM records WHERE site_id=? AND module=?',[siteId,'inventory']).some(r=>r.id!==record.id&&String(JSON.parse(r.data).assetCode||'').toLowerCase()===code.toLowerCase());
+      if(duplicates)throw new Error('Mã thiết bị đã tồn tại trong cơ sở này.');
+    }
+    return this.transact(()=>{
+      const id=record.id||uuid();
+      const old=record.id?this.one('SELECT * FROM records WHERE id=? AND site_id=? AND module=?',[id,siteId,module]):null;
+      if(record.id&&!old)throw new Error('Không tìm thấy bản ghi ở cơ sở này.');
+      if(old&&this.session.role==='STAFF'&&old.created_by!==this.session.id)throw new Error('Nhân viên chỉ được sửa bản ghi của mình.');
+      if(old)this.run('UPDATE records SET data=?,updated_at=? WHERE id=?',[raw,now(),id]);
+      else this.run('INSERT INTO records VALUES(?,?,?,?,?,?,?)',[id,siteId,module,raw,this.session.id,now(),now()]);
+      this.historyWrite({id,siteId,module,action:old?'UPDATE':'CREATE',before:old?.data,after:raw});
+      this.audit('RECORD_SAVE',siteId,{module,id});return {id};
+    });
+  }
+  recordsDelete({module,siteId,id}){
+    this.check(module,siteId,'write');
+    const old=this.one('SELECT * FROM records WHERE id=? AND module=? AND site_id=?',[id,module,siteId]);
+    if(!old)throw new Error('Không tìm thấy bản ghi.');
+    if(this.session.role==='STAFF'&&old.created_by!==this.session.id)throw new Error('Không được xóa bản ghi người khác.');
+    return this.transact(()=>{
+      if(module==='projects')this.run('DELETE FROM project_tasks WHERE project_id=? AND site_id=?',[id,siteId]);
+      this.historyWrite({id,siteId,module,action:'DELETE',before:old.data});
+      this.run('DELETE FROM records WHERE id=? AND module=? AND site_id=?',[id,module,siteId]);
+      this.audit('RECORD_DELETE',siteId,{module,id});return{success:true};
+    });
+  }
+  checklistMark({siteId,name,frequency,date,status,reason='',note=''}){
+    this.check('checklists',siteId,'write');
+    if(typeof name!=='string'||!name.trim()||name.length>180||!['Daily','Weekly','Monthly','Quarterly','Semiannual','Yearly','Custom'].includes(frequency))throw new Error('Mẫu checklist không hợp lệ.');
+    if(!['Done','Not Done'].includes(status))throw new Error('Kết quả kiểm tra không hợp lệ.');
+    if(status==='Not Done'&&!String(reason||'').trim())throw new Error('Cần nhập lý do khi chưa hoàn thành.');
+    const rawTemplate=this.one('SELECT value FROM settings WHERE key=?',['checklistTemplates']);
+    const templates=rawTemplate?JSON.parse(rawTemplate.value):DEFAULT_CHECKLISTS;
+    if(!Array.isArray(templates)||!templates.some(t=>t.name===name&&t.frequency===frequency))throw new Error('Mẫu checklist không tồn tại trong cài đặt.');
+    const pkey=periodKey(date,frequency),key=frequency+'::'+name.trim().toLocaleLowerCase('en-US');
+    const list=this.all('SELECT * FROM records WHERE site_id=? AND module=?',[siteId,'checklists']);
+    const old=list.find(r=>{const d=JSON.parse(r.data);return d.boardKey===key&&d.periodKey===pkey;});
+    if(old&&this.session.role==='STAFF'&&old.created_by!==this.session.id)throw new Error('Bạn không được sửa lượt kiểm tra của người khác.');
+    const data={...(old?JSON.parse(old.data):{}),title:name.trim(),frequency,boardKey:key,periodKey:pkey,checkedAt:date,status,reason:status==='Not Done'?String(reason).trim():'',note:String(note||'').slice(0,2000),checkedBy:this.session.name,checkedTime:now()};
+    const raw=JSON.stringify(data);const id=old?.id||uuid();
+    return this.transact(()=>{
+      if(old)this.run('UPDATE records SET data=?,updated_at=? WHERE id=?',[raw,now(),id]);
+      else this.run('INSERT INTO records VALUES(?,?,?,?,?,?,?)',[id,siteId,'checklists',raw,this.session.id,now(),now()]);
+      this.historyWrite({id,siteId,module:'checklists',action:old?'CHECK_AGAIN':'CHECK',before:old?.data,after:raw});
+      this.audit('CHECKLIST_MARK',siteId,{id,name,status,periodKey:pkey});return {id};
+    });
+  }
+  rosterBatch({siteId,employee,dates,shift,note=''}){
+    this.check('roster',siteId,'write');
+    if(typeof employee!=='string'||!employee.trim()||employee.length>150)throw new Error('Nhập tên nhân sự.');
+    if(!Array.isArray(dates)||dates.length<1||dates.length>62||new Set(dates).size!==dates.length||!dates.every(isoDay))throw new Error('Chọn 1–62 ngày hợp lệ, không trùng nhau.');
+    const shiftSetting=this.one('SELECT value FROM settings WHERE key=?',['shiftTypes']);
+    const types=shiftSetting?JSON.parse(shiftSetting.value):DEFAULT_SHIFTS;
+    const shiftType=Array.isArray(types)&&types.find(s=>s.code===shift);
+    if(!shiftType||!Number.isFinite(Number(shiftType.factor)))throw new Error('Mã ca không được cấu hình.');
+    const existing=this.all('SELECT * FROM records WHERE site_id=? AND module=?',[siteId,'roster']);
+    const name=employee.trim(),factor=Number(shiftType.factor);
+    return this.transact(()=>{
+      for(const date of dates){
+        const old=existing.find(r=>{const d=JSON.parse(r.data);return d.employee===name&&d.date===date;});
+        if(old&&this.session.role==='STAFF'&&old.created_by!==this.session.id)throw new Error('Bạn không được sửa ca của nhân viên khác.');
+        const raw=JSON.stringify({...old?JSON.parse(old.data):{},employee:name,date,shift,factor,note:String(note||'').slice(0,1000)});
+        const id=old?.id||uuid();
+        if(old)this.run('UPDATE records SET data=?,updated_at=? WHERE id=?',[raw,now(),id]);
+        else this.run('INSERT INTO records VALUES(?,?,?,?,?,?,?)',[id,siteId,'roster',raw,this.session.id,now(),now()]);
+        this.historyWrite({id,siteId,module:'roster',action:old?'SHIFT_UPDATE':'SHIFT_ASSIGN',before:old?.data,after:raw});
+      }
+      this.audit('ROSTER_BATCH',siteId,{employee:name,dates:dates.length,shift});return {count:dates.length};
+    });
+  }
+  projectTasksList({siteId,projectId}){
+    this.check('projects',siteId,'read');
+    const project=this.one('SELECT id FROM records WHERE id=? AND site_id=? AND module=?',[projectId,siteId,'projects']);
+    if(!project)throw new Error('Không tìm thấy dự án trong cơ sở này.');
+    return this.all('SELECT * FROM project_tasks WHERE site_id=? AND project_id=? ORDER BY created_at ASC',[siteId,projectId]);
+  }
+  updateProjectProgress(projectId,siteId){
+    const project=this.one('SELECT * FROM records WHERE id=? AND site_id=? AND module=?',[projectId,siteId,'projects']);
+    if(!project)return;
+    const tasks=this.all('SELECT status FROM project_tasks WHERE site_id=? AND project_id=?',[siteId,projectId]);
+    const data=JSON.parse(project.data);
+    const progress=tasks.length?Math.round(100*tasks.filter(t=>t.status==='Done').length/tasks.length):0;
+    if(Number(data.progress||0)===progress)return;
+    data.progress=progress;
+    const after=JSON.stringify(data);
+    this.run('UPDATE records SET data=?,updated_at=? WHERE id=?',[after,now(),projectId]);
+    this.historyWrite({id:projectId,siteId,module:'projects',action:'PROGRESS_UPDATE',before:project.data,after});
+  }
+  projectTaskSave({siteId,projectId,task}){
+    this.check('projects',siteId,'write');
+    if(!task||typeof task.title!=='string'||!task.title.trim()||task.title.length>250||!['Not Started','In Progress','Blocked','Done'].includes(task.status))throw new Error('Thông tin đầu việc không hợp lệ.');
+    if(task.due_date&&!isoDay(task.due_date))throw new Error('Hạn hoàn thành không hợp lệ.');
+    const project=this.one('SELECT id FROM records WHERE id=? AND site_id=? AND module=?',[projectId,siteId,'projects']);
+    if(!project)throw new Error('Dự án không tồn tại.');
+    const old=task.id?this.one('SELECT * FROM project_tasks WHERE id=? AND project_id=? AND site_id=?',[task.id,projectId,siteId]):null;
+    if(task.id&&!old)throw new Error('Đầu việc không thuộc dự án này.');
+    return this.transact(()=>{
+      const id=old?.id||uuid();const fields=[task.title.trim(),String(task.owner||'').slice(0,150),task.due_date||'',task.status,String(task.notes||'').slice(0,2000)];
+      if(old)this.run('UPDATE project_tasks SET title=?,owner=?,due_date=?,status=?,notes=?,updated_at=? WHERE id=?',[...fields,now(),id]);
+      else this.run('INSERT INTO project_tasks VALUES(?,?,?,?,?,?,?,?,?,?,?)',[id,siteId,projectId,...fields,this.session.id,now(),now()]);
+      this.updateProjectProgress(projectId,siteId);this.audit('PROJECT_TASK_SAVE',siteId,{projectId,id,status:task.status});return {id};
+    });
+  }
+  projectTaskDelete({siteId,projectId,id}){
+    this.check('projects',siteId,'write');
+    const old=this.one('SELECT id FROM project_tasks WHERE site_id=? AND project_id=? AND id=?',[siteId,projectId,id]);
+    if(!old)throw new Error('Không tìm thấy đầu việc.');
+    return this.transact(()=>{this.run('DELETE FROM project_tasks WHERE id=?',[id]);this.updateProjectProgress(projectId,siteId);this.audit('PROJECT_TASK_DELETE',siteId,{projectId,id});return {success:true};});
+  }
   dashboard(siteId){
     this.siteAllowed(siteId);
     const counts={};
@@ -122,6 +270,6 @@ class Store {
   settingsGet(){this.requireAuth();return this.all('SELECT * FROM settings').reduce((a,x)=>({...a,[x.key]:JSON.parse(x.value)}),{});}
   settingsSave({key,value}){this.requireAdmin();if(!/^[\w.-]{1,60}$/.test(key))throw new Error('Tên cài đặt không hợp lệ.');return this.transact(()=>{this.run('INSERT OR REPLACE INTO settings VALUES(?,?)',[key,JSON.stringify(value)]);this.audit('SETTINGS_SAVE',null,{key});return{success:true};});}
   exportRaw(){this.requireAdmin();this.audit('BACKUP_EXPORT',null,{});this.persist();return this.file;}
-  importRaw(bytes){this.requireAdmin();const SQL=this.db.constructor;const candidate=new SQL.Database(bytes);try{const rows=candidate.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','sites','records')");if(!rows.length||rows[0].values.length!==3)throw new Error('Không phải tệp backup Lotus IT hợp lệ.');const check=candidate.exec('PRAGMA integrity_check');if(check[0]?.values?.[0]?.[0]!=='ok')throw new Error('Tệp backup bị hỏng.');}catch(e){candidate.close();throw e;}candidate.close();const backup=this.file+'.bak-'+Date.now();fs.copyFileSync(this.file,backup);fs.writeFileSync(this.file,bytes);this.db.close();this.db=new SQL.Database(bytes);this.session=null;return{success:true,backup};}
+  importRaw(bytes){this.requireAdmin();const SQL=this.db.constructor;const candidate=new SQL.Database(bytes);try{const rows=candidate.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','sites','records')");if(!rows.length||rows[0].values.length!==3)throw new Error('Không phải tệp backup Lotus IT hợp lệ.');const check=candidate.exec('PRAGMA integrity_check');if(check[0]?.values?.[0]?.[0]!=='ok')throw new Error('Tệp backup bị hỏng.');}catch(e){candidate.close();throw e;}candidate.close();const backup=this.file+'.bak-'+Date.now();fs.copyFileSync(this.file,backup);fs.writeFileSync(this.file,bytes);this.db.close();this.db=new SQL.Database(bytes);this.ensureUpgradeTables();this.persist();this.session=null;return{success:true,backup};}
 }
 module.exports={Store,MODULES};
