@@ -21,7 +21,7 @@ test('default Vietnamese translation covers primary modules and statuses',()=>{
  assert.equal(tr('Done'),'Hoàn thành');
  assert.equal(tr('Not Done'),'Chưa hoàn thành');
  assert.equal(tr('Budget'),'Ngân sách');
- assert.equal(tr('English'),'English');
+ assert.equal(tr('English'),'Tiếng Anh');
 });
 test('switch to English translates Vietnamese UI without changing database keys',()=>{
  const {setUILanguage,tr}=loadI18n();
