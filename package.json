@@ -57,7 +57,6 @@
       ],
       "artifactName": "Lotus-IT-Command-Setup-${version}.${ext}",
       "icon": "assets/icon.ico",
-      "assets/icon.png",
       "signAndEditExecutable": false
     },
     "nsis": {
