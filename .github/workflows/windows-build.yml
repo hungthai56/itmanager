@@ -1,0 +1,43 @@
+name: Windows build and test
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - 'electron/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'assets/**'
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'vite.config.ts'
+      - '.github/workflows/windows-build.yml'
+permissions:
+  contents: read
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify storage
+        run: npm test
+      - name: TypeScript and Vite
+        run: npm run build
+      - name: Package Windows installer
+        run: npx electron-builder --win nsis --publish never
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lotus-IT-Command-Windows-Installer
+          path: release/*.exe
+          if-no-files-found: error

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+release/
+.env
+*.log
+*.db
+*.db.bak
+.DS_Store
+.vscode/
