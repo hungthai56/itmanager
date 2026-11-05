@@ -71,7 +71,7 @@ class Store {
   transact(fn) { this.db.run('BEGIN'); try { const res=fn(); this.db.run('COMMIT'); this.persist(); return res; } catch(e) {this.db.run('ROLLBACK');throw e;} }
   audit(action,site,details) {this.run('INSERT INTO audit VALUES(?,?,?,?,?,?,?)',[uuid(),this.session?.id??null,this.session?.username??null,action,site||null,JSON.stringify(details??{}),now()]);}
   get userCount() {return this.one('SELECT COUNT(*) n FROM users').n;}
-  info(){ return {ready:this.userCount>0, version:'0.2.0', dataPath:this.folder, modules:MODULES}; }
+  info(){ return {ready:this.userCount>0, version:'0.4.0', dataPath:this.folder, modules:MODULES}; }
   setup({name,username,password,siteName}) {
     if(this.userCount) throw new Error('Hệ thống đã được khởi tạo.');
     if(!name?.trim()||!username?.trim()||!siteName?.trim()||!passwordOkay(password)) throw new Error('Điền đủ thông tin. Mật khẩu phải từ 10 ký tự, có chữ và số.');
@@ -158,6 +158,30 @@ class Store {
       else this.run('INSERT INTO records VALUES(?,?,?,?,?,?,?)',[id,siteId,module,raw,this.session.id,now(),now()]);
       this.historyWrite({id,siteId,module,action:old?'UPDATE':'CREATE',before:old?.data,after:raw});
       this.audit('RECORD_SAVE',siteId,{module,id});return {id};
+    });
+  }
+  recordsBatchStatus({module,siteId,ids,status}){
+    this.check(module,siteId,'write');
+    const values={tasks:['Open','In Progress','Done'],inventory:['Active','Spare','Maintenance','Retired']};
+    if(!values[module]||!values[module].includes(status))throw new Error('Trạng thái không hợp lệ.');
+    if(!Array.isArray(ids)||!ids.length||ids.length>500||ids.some(id=>typeof id!=='string'||!id))throw new Error('Danh sách lựa chọn không hợp lệ (tối đa 500).');
+    const unique=[...new Set(ids)];
+    // Pre-validate all records, site isolation, and STAFF ownership before any write.
+    const originals=unique.map(id=>this.one('SELECT * FROM records WHERE id=? AND site_id=? AND module=?',[id,siteId,module]));
+    if(originals.some(row=>!row))throw new Error('Có bản ghi không tồn tại trong cơ sở này.');
+    if(this.session.role==='STAFF'&&originals.some(row=>row.created_by!==this.session.id))throw new Error('Nhân viên chỉ được cập nhật bản ghi của mình.');
+    return this.transact(()=>{
+      let updated=0;
+      for(const old of originals){
+        const before=JSON.parse(old.data);
+        if(before.status===status)continue;
+        const after=JSON.stringify({...before,status});
+        this.run('UPDATE records SET data=?,updated_at=? WHERE id=? AND site_id=? AND module=?',[after,now(),old.id,siteId,module]);
+        this.historyWrite({id:old.id,siteId,module,action:'BATCH_STATUS',before:old.data,after});
+        updated++;
+      }
+      this.audit('RECORD_BATCH_STATUS',siteId,{module,status,requested:unique.length,updated});
+      return {updated};
     });
   }
   recordsDelete({module,siteId,id}){

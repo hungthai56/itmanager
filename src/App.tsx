@@ -1,16 +1,18 @@
 import {tr, translateLocaleValue, readUILanguage, setUILanguage} from './i18n';
 import type {Language} from './i18n';
-import {useCallback,useEffect,useMemo,useState} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import type {FormEvent,ChangeEvent,ReactNode} from 'react';
 import {
   Activity,AlertCircle,ArrowDownToLine,ArrowRight,BarChart3,BookOpenText,Building2,
   CalendarDays,CheckCircle2,ChevronDown,ChevronRight,ClipboardList,Clock3,CloudOff,
   Database,FilePlus2,FileText,Filter,FolderKanban,HardDrive,History,KeyRound,
   LayoutDashboard,LogOut,Menu,Pencil,Plus,Printer,RefreshCw,
-  Save,Search,Settings2,ShieldCheck,SlidersHorizontal,Trash2,Upload,Users,Wallet,X
+  Save,Search,Settings2,ShieldCheck,SlidersHorizontal,Trash2,Upload,Users,Wallet,X,Command,Keyboard,Check
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import {ChecklistBoard,RosterCalendar,ProjectRegistry,RecordHistory} from './OperationsBoards';
+import {FastTaskComposer,QuickEditableCell} from './QuickControls';
+import './quick.css';
 import type {Account,AuthStatus,Dashboard,ModuleId,RecordItem,Site,UserItem,Role} from './types';
 import {labelFor,moduleIds,modules,type Field} from './schema';
 
@@ -41,6 +43,24 @@ export default function App(){
  const [auth,setAuth]=useState<AuthStatus|null>(null),[screen,setScreen]=useState<Screen>('dashboard'),[siteId,setSiteId]=useState('');
  const [busy,setBusy]=useState(false),[toast,setToast]=useState<{text:string;error?:boolean}|null>(null),[sidebarOpen,setSidebarOpen]=useState(false);
  const [reload,setReload]=useState(0);
+ const [launcherOpen,setLauncherOpen]=useState(false),[launcherTerm,setLauncherTerm]=useState(''),[createToken,setCreateToken]=useState(0);
+ useEffect(()=>{
+  const shortcut=(event:KeyboardEvent)=>{
+   const node=event.target as HTMLElement;
+   const isInput=['INPUT','TEXTAREA','SELECT'].includes(node.tagName)||node.isContentEditable;
+   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+    event.preventDefault();setLauncherOpen(current=>!current);setLauncherTerm('');return;
+   }
+   if(event.key==='Escape'){setLauncherOpen(false);return}
+   if(!auth?.authenticated||auth.user?.forceReset)return;
+   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='n'&&!isInput){
+    event.preventDefault();if(moduleIds.includes(screen as ModuleId)){setCreateToken(t=>t+1)}return;
+   }
+  };
+  window.addEventListener('keydown',shortcut);
+  return()=>window.removeEventListener('keydown',shortcut);
+ },[auth,screen]);
+
  const loadAuth=useCallback(async()=>{try{const state=await api<AuthStatus>('auth.status');setAuth(state);if(state.authenticated){setSiteId(current=>state.sites?.some(s=>s.id===current)?current:state.user?.siteId||state.sites?.[0]?.id||'');}}catch(e){setToast({text:err(e),error:true})}},[]);
  useEffect(()=>{void loadAuth()},[loadAuth]);
  const flash=useCallback((text:string,error=false)=>{setToast({text,error});window.setTimeout(()=>setToast(null),4200)},[]);
@@ -55,7 +75,7 @@ export default function App(){
  const pageTitle=tr(moduleIds.includes(screen as ModuleId)?modules[screen as ModuleId].title:screenNames[screen]||screen);
  return <div className="app">
   <aside className={cn('sidebar',sidebarOpen&&'mobile-show')}>
-    <div className="brand"><div className="brand-icon"><Activity size={22}/></div><div><strong>LOTUS<span> IT</span></strong><small>COMMAND CENTER <b>v0.3</b></small></div></div>
+    <div className="brand"><div className="brand-icon"><Activity size={22}/></div><div><strong>LOTUS<span> IT</span></strong><small>COMMAND CENTER <b>v0.4</b></small></div></div>
     <div className="sidebar-site">{tr("WORKSPACE")}<span className="offline-pill"><CloudOff size={12}/>{tr("Offline")}</span></div>
     <div className="side-scroll">
       <div className="navgroup"><div className="navlabel">{tr("OVERVIEW")}</div>{menuItem('dashboard',tr('Dashboard'))}{canAdmin&&menuItem('cluster',tr('Cluster Overview'))}</div>
@@ -67,14 +87,14 @@ export default function App(){
   {sidebarOpen&&<div className="backdrop mobile-only" onClick={()=>setSidebarOpen(false)}/>}
   <div className="main-shell">
     <header className="topbar"><div className="crumb"><button className="iconbtn mobile-only" onClick={()=>setSidebarOpen(true)}><Menu/></button><span className="crumb-root">{tr("Workspace")}</span><ChevronRight size={14}/><strong>{pageTitle}</strong></div>
-      <div className="topbar-right"><span className="app-version">{tr("LOCAL DESKTOP")}</span><LanguageSelect value={language} onChange={changeLanguage}/><div className="select-site"><Building2 size={15}/><select aria-label={tr("Cơ sở hiện tại")} value={siteId} onChange={e=>setSiteId(e.target.value)}>{auth.sites?.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select><ChevronDown size={14}/></div><button className="iconbtn profile-top" title={tr("Đăng xuất")} onClick={logout}><LogOut size={18}/></button></div>
+      <div className="topbar-right"><button type="button" className="top-search" onClick={()=>{setLauncherOpen(true);setLauncherTerm('')}}><Search size={15}/><span>{tr("Tìm nhanh / Mở chức năng")}</span><kbd>Ctrl K</kbd></button><span className="app-version">{tr("LOCAL DESKTOP")}</span><LanguageSelect value={language} onChange={changeLanguage}/><div className="select-site"><Building2 size={15}/><select aria-label={tr("Cơ sở hiện tại")} value={siteId} onChange={e=>setSiteId(e.target.value)}>{auth.sites?.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select><ChevronDown size={14}/></div><button className="iconbtn profile-top" title={tr("Đăng xuất")} onClick={logout}><LogOut size={18}/></button></div>
     </header>
     <main className="page">
       {user.forceReset?<ChangePassword onSaved={()=>void loadAuth()} notify={flash}/>:
       !site?<Empty title={tr("Chưa có cơ sở")} desc={tr("Vui lòng thêm khách sạn trong phần quản trị.")}/>:
       screen==='dashboard'?<DashboardScreen key={site.id+reload} site={site} user={user} onNavigate={setScreen} notify={flash}/>:
       screen==='cluster'&&canAdmin?<ClusterScreen sites={auth.sites||[]} onGoto={sid=>{setSiteId(sid);setScreen('dashboard')}}/>:
-      moduleIds.includes(screen as ModuleId)?<ModuleScreen key={screen+site.id+reload} module={screen as ModuleId} site={site} user={user} action={action} notify={flash}/>:
+      moduleIds.includes(screen as ModuleId)?<ModuleScreen key={screen+site.id} openNewToken={createToken} module={screen as ModuleId} site={site} user={user} action={action} notify={flash}/>:
       screen==='users'&&canAdmin?<UsersScreen sites={auth.sites||[]} action={action}/>:
       screen==='sites'&&canAdmin?<SitesScreen sites={auth.sites||[]} onRefresh={async()=>{await loadAuth();setReload(v=>v+1)}} action={action}/>:
       screen==='permissions'&&canAdmin?<PermissionsScreen action={action}/>:
@@ -84,6 +104,12 @@ export default function App(){
       <Empty title={tr("Không có quyền truy cập")} desc={tr("Bạn không được phép mở màn hình quản trị này.")}/>}
     </main>
   </div>
+  {launcherOpen&&<div className="modal-shade launcher-shade" onMouseDown={()=>setLauncherOpen(false)}>
+   <div className="launcher" role="dialog" aria-label={tr('Điều hướng nhanh')} onMouseDown={e=>e.stopPropagation()}>
+    <div className="launcher-search"><Search size={19}/><input autoFocus value={launcherTerm} onChange={e=>setLauncherTerm(e.target.value)} placeholder={tr('Tìm phân hệ hoặc thao tác...')} onKeyDown={e=>{if(e.key==='Enter'){const a=[{id:'dashboard' as Screen,title:'Dashboard'},...moduleIds.map(id=>({id:id as Screen,title:modules[id].title}))].find(x=>tr(x.title).toLowerCase().includes(launcherTerm.toLowerCase()));if(a){setScreen(a.id);setLauncherOpen(false)}}}}/><kbd>Esc</kbd></div>
+    <div className="launcher-results">{([{id:'dashboard' as Screen,title:'Dashboard'},...moduleIds.map(id=>({id:id as Screen,title:modules[id].title})),...(canAdmin?[{id:'users' as Screen,title:'Users'},{id:'settings' as Screen,title:'Settings'}]:[])]).filter(x=>tr(x.title).toLowerCase().includes(launcherTerm.trim().toLowerCase())).map(x=><button type="button" key={x.id} onClick={()=>{setScreen(x.id);setLauncherOpen(false);setLauncherTerm('')}}><Icon name={x.id} size={17}/><span>{tr(x.title)}</span><ChevronRight size={15}/></button>)}
+    </div><div className="launcher-help"><Keyboard size={14}/>{tr('Ctrl+K: tìm nhanh')} · {tr('Ctrl+N: thêm mới')} · {tr('/ : tìm trong bảng')}</div>
+   </div></div>}
   {busy&&<div className="busy-overlay"><div className="spinner"/>{tr("Đang lưu dữ liệu...")}</div>}
   {toast&&<div className={cn('toast',toast.error&&'error')}><span>{toast.error?<AlertCircle size={18}/>:<CheckCircle2 size={18}/>}</span>{toast.text}<button className="iconbtn" onClick={()=>setToast(null)}><X size={14}/></button></div>}
  </div>;
@@ -132,17 +158,42 @@ function ClusterScreen({sites,onGoto}:{sites:Site[];onGoto:(id:string)=>void}){
  useEffect(()=>{Promise.all(sites.map(async site=>({site,stats:await api<Dashboard>('dashboard.get',{siteId:site.id})}))).then(setData).catch(()=>setData([]))},[sites]);
  return <><PageHead title={tr("Cluster Overview")} desc={tr("Một góc nhìn tổng hợp cho toàn bộ cơ sở thuộc hệ thống khách sạn.")}/><div className="cluster-grid">{data.map(({site,stats})=><div key={site.id} className="panel cluster-card"><div className="cluster-top"><div className="cluster-brand"><Building2/><div><strong>{site.name}</strong><span>{site.code} · {site.currency}</span></div></div><button className="iconbtn" onClick={()=>onGoto(site.id)} title={tr("Xem Dashboard")}><ArrowRight/></button></div><div className="cluster-stats"><div><span>{tr("Daily Tasks")}</span><strong>{stats.counts.tasks??'—'}</strong></div><div><span>{tr("Check Lists")}</span><strong>{stats.counts.checklists??'—'}</strong></div><div><span>{tr("Inventory")}</span><strong>{stats.counts.inventory??'—'}</strong></div><div><span>{tr("Contracts")}</span><strong>{stats.counts.contracts??'—'}</strong></div></div><div className="cluster-alert">{stats.openTasks} công việc đang mở · {stats.expiringContracts} hợp đồng gần hết hạn</div></div>)}</div></>;
 }
-function ModuleScreen({module,site,user,action,notify}:{module:ModuleId;site:Site;user:Account;action:(fn:()=>Promise<unknown>,msg?:string)=>Promise<void>;notify:(s:string,e?:boolean)=>void}){
- const spec=modules[module];const [records,setRecords]=useState<RecordItem[]>([]),[loading,setLoading]=useState(true),[term,setTerm]=useState(''),[filter,setFilter]=useState('all'),[period,setPeriod]=useState<'today'|'tomorrow'|'records'>('today'),[selected,setSelected]=useState<string[]>([]),[editing,setEditing]=useState<RecordItem|null|undefined>(undefined),[qrView,setQrView]=useState<{name:string;code:string;src:string}|null>(null),[config,setConfig]=useState<Record<string,any>>({}),[bulkOpen,setBulkOpen]=useState(false),[historyRecord,setHistoryRecord]=useState<RecordItem|null>(null);
+function ModuleScreen({module,site,user,action,notify,openNewToken}:{module:ModuleId;site:Site;user:Account;openNewToken:number;action:(fn:()=>Promise<unknown>,msg?:string)=>Promise<void>;notify:(s:string,e?:boolean)=>void}){
+ const spec=modules[module];const [records,setRecords]=useState<RecordItem[]>([]),[loading,setLoading]=useState(true),[term,setTerm]=useState(''),[filter,setFilter]=useState('all'),[period,setPeriod]=useState<'today'|'tomorrow'|'records'>('today'),[selected,setSelected]=useState<string[]>([]),[editing,setEditing]=useState<RecordItem|null|undefined>(undefined),[qrView,setQrView]=useState<{name:string;code:string;src:string}|null>(null),[config,setConfig]=useState<Record<string,any>>({}),[bulkOpen,setBulkOpen]=useState(false),[historyRecord,setHistoryRecord]=useState<RecordItem|null>(null),[bulkStatus,setBulkStatus]=useState(module==='inventory'?'Active':'Done'),[pendingIds,setPendingIds]=useState<string[]>([]);
+ const searchInput=useRef<HTMLInputElement>(null);
+ useEffect(()=>{if(openNewToken>0){if(module==='tasks')document.querySelector<HTMLInputElement>('.quick-composer-title input')?.focus();else setEditing(null)}},[openNewToken,module]);
+ useEffect(()=>{const key=(e:KeyboardEvent)=>{const t=e.target as HTMLElement;if(editing===undefined&&!bulkOpen&&!qrView&&!historyRecord&&e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(t.tagName)&&!t.isContentEditable){e.preventDefault();searchInput.current?.focus()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[editing,bulkOpen,qrView,historyRecord]);
  const canWrite=user.role==='SYS'||user.role==='MANAGER'||(user.role==='SUPERVISOR'&&['tasks','checklists','roster','inventory','contracts','projects','knowledge'].includes(module))||(user.role==='STAFF'&&['tasks','checklists','roster','knowledge'].includes(module));
  const override=user.overrides?.[module]?.write;const allowWrite=override==='allow'||(override!=='deny'&&canWrite);
- const refresh=useCallback(async()=>{setLoading(true);try{setRecords(await api<RecordItem[]>('records.list',{module,siteId:site.id}))}catch(e){notify(err(e),true)}finally{setLoading(false)}},[module,site.id,notify]);
+ const loadedOnce=useRef(false);
+ const refresh=useCallback(async()=>{if(!loadedOnce.current)setLoading(true);try{setRecords(await api<RecordItem[]>('records.list',{module,siteId:site.id}));loadedOnce.current=true}catch(e){notify(err(e),true)}finally{setLoading(false)}},[module,site.id,notify]);
  useEffect(()=>{void refresh()},[refresh]);
  useEffect(()=>{void api<Record<string,any>>('settings.get').then(setConfig).catch(()=>{})},[]);
  const filtered=useMemo(()=>records.filter(r=>{const matches=JSON.stringify(r.data).toLowerCase().includes(term.toLowerCase());const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);const next=`${tomorrow.getFullYear()}-${String(tomorrow.getMonth()+1).padStart(2,'0')}-${String(tomorrow.getDate()).padStart(2,'0')}`;const due=String(r.data.dueDate||'');const periodPass=module!=='tasks'||period==='records'||(period==='today'&&(!due||due<=today()&&r.data.status!=='Done'||due===today()))||(period==='tomorrow'&&due===next);return matches&&periodPass&&(filter==='all'||String(r.data.status||'')===filter)}),[records,term,filter,period,module]);
  const statuses=Array.from(new Set(records.map(r=>String(r.data.status||'')).filter(Boolean)));
  const totalPl=module==='pl'?records.reduce((a,r)=>({budget:a.budget+Number(r.data.budget||0),actual:a.actual+Number(r.data.actual||0)}),{budget:0,actual:0}):null;
  const totalCapex=module==='capex'?records.reduce((n,r)=>n+Number(r.data.quantity||0)*Number(r.data.unitPrice||0),0):null;
+ const editableRow=(r:RecordItem)=>allowWrite&&(user.role!=='STAFF'||r.created_by===user.id);
+ async function quickUpdate(r:RecordItem,patch:Record<string,string|number|boolean|undefined>){
+  if(!editableRow(r)||pendingIds.includes(r.id))return;
+  const next={...r.data,...patch};
+  setPendingIds(v=>[...v,r.id]);
+  setRecords(v=>v.map(x=>x.id===r.id?{...x,data:next}:x));
+  try{await api('records.save',{module,siteId:site.id,record:{id:r.id,data:next}});await refresh()}
+  catch(e){setRecords(v=>v.map(x=>x.id===r.id?r:x));notify(err(e),true);throw e}
+  finally{setPendingIds(v=>v.filter(id=>id!==r.id))}
+ }
+ async function quickCreate(data:Record<string,string>){
+  try{await api('records.save',{module:'tasks',siteId:site.id,record:{data}});await refresh();notify(tr('Đã tạo công việc nhanh.'))}
+  catch(e){notify(err(e),true);throw e}
+ }
+ async function applyBulk(){
+  if(!selected.length||!allowWrite||!selected.every(id=>records.some(r=>r.id===id&&editableRow(r))))return;
+  setPendingIds(v=>[...new Set([...v,...selected])]);
+  try{const result=await api<{updated:number}>('records.batchStatus',{module,siteId:site.id,ids:selected,status:bulkStatus});setSelected([]);await refresh();notify(`${tr('Đã cập nhật')} ${result.updated} ${tr('bản ghi')}.`)}
+  catch(e){notify(err(e),true)}finally{setPendingIds([])}
+ }
+ const quietMutate=async(fn:()=>Promise<unknown>,message?:string)=>{try{await fn();if(message)notify(tr(message))}catch(e){notify(err(e),true)}};
  async function exportExcel(){await action(async()=>{const result=await api<{cancelled?:boolean}>('reports.export',{module,siteId:site.id,columns:spec.fields.filter(f=>f.type!=='textarea').map(f=>f.key),labels:Object.fromEntries(spec.fields.map(f=>[f.key,tr(f.label)]))});if(!result.cancelled)notify(tr('Đã xuất file Excel thành công.'))})}
  async function remove(r:RecordItem){if(!window.confirm(`Xóa ${tr(spec.singular)} "${firstTitle(r)}"? Hành động này không thể hoàn tác.`))return;await action(async()=>{await api('records.delete',{module,siteId:site.id,id:r.id});await refresh()},'Đã xóa bản ghi.')}
  async function save(form:Record<string,string|number|boolean|undefined>){await action(async()=>{await api('records.save',{module,siteId:site.id,record:{id:editing?.id,data:form}});setEditing(undefined);await refresh()},'Đã lưu dữ liệu thành công.')}
@@ -150,13 +201,14 @@ function ModuleScreen({module,site,user,action,notify}:{module:ModuleId;site:Sit
  async function printQrs(){await action(async()=>{await api('qr.print',{siteId:site.id,ids:selected});setSelected([])},'Đã mở cửa sổ tem QR. Nhấn Ctrl+P để in.')}
  function displayCell(r:RecordItem,key:string){const v=r.data[key];if(key==='status'||key==='priority')return <Badge text={v}/>;if(key.toLowerCase().includes('date')||key==='checkedAt'||key==='warrantyUntil'||key==='updatedAt')return dateNice(v);if(['budget','actual','unitPrice','purchasePrice','amount'].includes(key))return nfmt(v);return translateLocaleValue(v??'—')||'—'}
  return <><PageHead eyebrow={`${tr(spec.group.toUpperCase())} • ${site.code}`} title={tr(spec.title)} desc={tr(spec.description)} actions={<><button className="btn light" onClick={exportExcel}><ArrowDownToLine size={16}/>{tr("Xuất Excel")}</button>{module==='roster'&&allowWrite&&<button className="btn light" onClick={()=>setBulkOpen(true)}><CalendarDays size={16}/>{tr("Gán nhiều ngày")}</button>}{allowWrite&&<button className="btn primary" onClick={()=>setEditing(null)}><Plus size={17}/> Thêm {tr(spec.singular)}</button>}</>}/>
+  {module==='tasks'&&allowWrite&&<FastTaskComposer owner={user.name} onCreate={quickCreate}/>}
   <div className="kpi-grid compact"><Kpi name={tr("Tổng bản ghi")} value={records.length} sub={tr(spec.title)} tone="blue" icon={<Icon name={module}/>}/><Kpi name={tr("Cập nhật hôm nay")} value={records.filter(x=>x.updated_at.slice(0,10)===today()).length} sub={tr("Thay đổi trong ngày")} tone="green" icon={<CheckCircle2/>}/>{module==='pl'?<><Kpi name={tr("Budget")} value={nfmt(totalPl?.budget)} icon={<Wallet/>} sub={site.currency}/><Kpi name={tr("Actual")} value={nfmt(totalPl?.actual)} icon={<BarChart3/>} sub={`Variance: ${nfmt((totalPl?.actual||0)-(totalPl?.budget||0))}`}/></>:module==='capex'?<><Kpi name={tr("Tổng dự toán")} value={nfmt(totalCapex)} icon={<Wallet/>} sub={site.currency}/><Kpi name={tr("Hạng mục hoãn")} value={records.filter(r=>r.data.status==='Deferred').length} icon={<Clock3/>} sub={tr("Deferred")}/></>:<><Kpi name={tr("Cần chú ý")} value={records.filter(r=>['Open','Not Done','Expired','Critical','On Hold'].includes(String(r.data.status))).length} sub={tr("Chưa hoàn tất / có rủi ro")} tone="orange" icon={<AlertCircle/>}/><Kpi name={tr("Hoàn tất")} value={records.filter(r=>['Done','Completed','Approved'].includes(String(r.data.status))).length} sub={tr("Đã hoàn thành")} tone="green" icon={<CheckCircle2/>}/></>}</div>
-  {module==='checklists'&&<ChecklistBoard site={site} records={records} config={config} editable={allowWrite} mutate={action} refresh={refresh}/>}
-  {module==='roster'&&<RosterCalendar site={site} records={records} config={config} editable={allowWrite} mutate={action} refresh={refresh}/>}
-  {module==='projects'&&<ProjectRegistry site={site} records={records} editable={allowWrite} mutate={action} refresh={refresh}/>}
+  {module==='checklists'&&<ChecklistBoard site={site} records={records} config={config} editable={allowWrite} mutate={quietMutate} refresh={refresh} notify={notify}/>}
+  {module==='roster'&&<RosterCalendar site={site} records={records} config={config} editable={allowWrite} mutate={quietMutate} refresh={refresh} notify={notify}/>}
+  {module==='projects'&&<ProjectRegistry site={site} records={records} editable={allowWrite} mutate={quietMutate} refresh={refresh} notify={notify}/>}
   {module==='capex'&&<Forecast records={records} currency={site.currency}/>}
-  <div className="panel data-panel">{module==='tasks'&&<div className="period-tabs">{([['today','Today'],['tomorrow','Tomorrow'],['records','Records']] as const).map(([v,label])=><button key={v} className={cn(period===v&&'active')} onClick={()=>setPeriod(v)}>{tr(label)}</button>)}</div>}<div className="list-toolbar"><div className="searchbox"><Search size={18}/><input value={term} onChange={e=>setTerm(e.target.value)} placeholder={`Tìm ${tr(spec.singular)}, từ khóa, mã...`}/></div><div className="list-filters">{module==='inventory'&&selected.length>0&&<button className="btn light" onClick={printQrs}><Printer size={15}/> In {selected.length} tem QR</button>}{statuses.length>0&&<div className="select-wrapper"><Filter size={15}/><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">{tr("Tất cả trạng thái")}</option>{statuses.map(s=><option key={s} value={s}>{tr(s)}</option>)}</select></div>}<button className="iconbtn refresh" title="Làm mới" onClick={refresh}><RefreshCw size={17}/></button></div></div>
-    {loading?<div className="loading-content"><div className="spinner"/>{tr("Đang tải dữ liệu...")}</div>:filtered.length===0?<Empty title={term?'Không tìm thấy dữ liệu':'Chưa có bản ghi nào'} desc={term?'Thử tìm kiếm bằng từ khóa khác.':`Tạo ${tr(spec.singular)} đầu tiên để bắt đầu quản lý.`}/>:<div className="table-scroll"><table className="data-table"><thead><tr>{module==='inventory'&&<th className="check-col"><input type="checkbox" checked={filtered.length>0&&filtered.every(r=>selected.includes(r.id))} onChange={e=>setSelected(e.target.checked?filtered.map(r=>r.id):[])}/></th>}<th className="num-col">#</th>{spec.columns.map(key=><th key={key}>{tr(labelFor(module,key))}</th>)}<th className="action-col">{tr("Thao tác")}</th></tr></thead><tbody>{filtered.map((r,i)=><tr key={r.id}>{module==='inventory'&&<td><input type="checkbox" checked={selected.includes(r.id)} onChange={e=>setSelected(s=>e.target.checked?[...s,r.id]:s.filter(x=>x!==r.id))}/></td>}<td className="muted num-col">{i+1}</td>{spec.columns.map((key,j)=><td key={key}>{j===0?<strong className="cell-title">{displayCell(r,key)}</strong>:module==='tasks'&&key==='status'&&allowWrite?<select className="inline-status" value={String(r.data.status||'Open')} onChange={e=>void action(async()=>{await api('records.save',{module,siteId:site.id,record:{id:r.id,data:{...r.data,status:e.target.value}}});await refresh()},'Đã cập nhật trạng thái.')}><option value="Open">{tr("Open")}</option><option value="In Progress">{tr("In Progress")}</option><option value="Done">{tr("Done")}</option></select>:displayCell(r,key)}</td>)}<td className="cell-actions"><button className="iconbtn" title="Xem lịch sử thay đổi" onClick={()=>setHistoryRecord(r)}><History size={15}/></button>{module==='inventory'&&<button className="iconbtn" title="Mã QR" onClick={()=>void qrRecord(r)}><Printer size={15}/></button>}{allowWrite&&<><button className="iconbtn" title={tr("Sửa")} onClick={()=>setEditing(r)}><Pencil size={15}/></button><button className="iconbtn danger" title="Xóa" onClick={()=>void remove(r)}><Trash2 size={15}/></button></>}</td></tr>)}</tbody></table></div>}
+  <div className="panel data-panel">{module==='tasks'&&<div className="period-tabs">{([['today','Today'],['tomorrow','Tomorrow'],['records','Records']] as const).map(([v,label])=><button key={v} className={cn(period===v&&'active')} onClick={()=>setPeriod(v)}>{tr(label)}</button>)}</div>}<div className="list-toolbar"><div className="searchbox"><Search size={18}/><input ref={searchInput} value={term} onChange={e=>setTerm(e.target.value)} placeholder={`Tìm ${tr(spec.singular)}, từ khóa, mã...`}/></div><div className="list-filters">{(module==='tasks'||module==='inventory')&&selected.length>0&&allowWrite&&<div className="bulk-quick"><strong>{selected.length} {tr('đã chọn')}</strong><select aria-label={tr('Chuyển trạng thái')} value={bulkStatus} onChange={e=>setBulkStatus(e.target.value)}>{(module==='tasks'?['Open','In Progress','Done']:['Active','Spare','Maintenance','Retired']).map(st=><option key={st} value={st}>{tr(st)}</option>)}</select><button className="btn light mini" onClick={()=>void applyBulk()} disabled={pendingIds.length>0||!selected.every(id=>records.some(r=>r.id===id&&editableRow(r)))} title={tr('Chỉ được cập nhật bản ghi có quyền sửa')}><Check size={15}/>{tr('Áp dụng')}</button><button className="iconbtn" title={tr('Bỏ chọn')} onClick={()=>setSelected([])}><X size={15}/></button></div>}{module==='inventory'&&selected.length>0&&<button className="btn light" onClick={printQrs}><Printer size={15}/> In {selected.length} tem QR</button>}{statuses.length>0&&<div className="select-wrapper"><Filter size={15}/><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">{tr("Tất cả trạng thái")}</option>{statuses.map(s=><option key={s} value={s}>{tr(s)}</option>)}</select></div>}<button className="iconbtn refresh" title="Làm mới" onClick={refresh}><RefreshCw size={17}/></button></div></div>
+    {loading?<div className="loading-content"><div className="spinner"/>{tr("Đang tải dữ liệu...")}</div>:filtered.length===0?<Empty title={term?'Không tìm thấy dữ liệu':'Chưa có bản ghi nào'} desc={term?'Thử tìm kiếm bằng từ khóa khác.':`Tạo ${tr(spec.singular)} đầu tiên để bắt đầu quản lý.`}/>:<div className="table-scroll"><table className="data-table"><thead><tr>{(module==='inventory'||module==='tasks')&&<th className="check-col"><input type="checkbox" checked={filtered.length>0&&filtered.every(r=>selected.includes(r.id))} onChange={e=>setSelected(e.target.checked?Array.from(new Set([...selected,...filtered.map(r=>r.id)])):[])}/></th>}<th className="num-col">#</th>{spec.columns.map(key=><th key={key}>{tr(labelFor(module,key))}</th>)}<th className="action-col">{tr("Thao tác")}</th></tr></thead><tbody>{filtered.map((r,i)=><tr key={r.id}>{(module==='inventory'||module==='tasks')&&<td><input type="checkbox" checked={selected.includes(r.id)} onChange={e=>setSelected(s=>e.target.checked?[...s,r.id]:s.filter(x=>x!==r.id))}/></td>}<td className="muted num-col">{i+1}</td>{spec.columns.map((key,j)=><td key={key}>{module==='tasks'&&key==='status'&&editableRow(r)?<button type="button" disabled={pendingIds.includes(r.id)} className={`quick-status-chip ${statusColor(r.data.status)}`} title={tr('Nhấp để chuyển trạng thái')} onClick={()=>void quickUpdate(r,{status:r.data.status==='Open'?'In Progress':r.data.status==='In Progress'?'Done':'Open'}).catch(()=>{})}><Badge text={r.data.status||'Open'}/><ChevronRight size={13}/></button>:module==='tasks'&&key==='dueDate'&&editableRow(r)?<input className="quick-date-input" type="date" aria-label={tr('Hạn hoàn thành')} value={String(r.data.dueDate||'')} disabled={pendingIds.includes(r.id)} onChange={e=>void quickUpdate(r,{dueDate:e.target.value}).catch(()=>{})}/>:module==='tasks'&&key==='priority'&&editableRow(r)?<select className="quick-inline-select" aria-label={tr('Mức ưu tiên')} value={String(r.data.priority||'Normal')} disabled={pendingIds.includes(r.id)} onChange={e=>void quickUpdate(r,{priority:e.target.value}).catch(()=>{})}>{['Low','Normal','High','Critical'].map(p=><option key={p} value={p}>{tr(p)}</option>)}</select>:module==='inventory'&&key==='status'&&editableRow(r)?<select className="quick-inline-select" aria-label={tr('Tình trạng')} value={String(r.data.status||'Active')} disabled={pendingIds.includes(r.id)} onChange={e=>void quickUpdate(r,{status:e.target.value}).catch(()=>{})}>{['Active','Spare','Maintenance','Retired'].map(st=><option key={st} value={st}>{tr(st)}</option>)}</select>:((module==='tasks'&&['title','assignedTo'].includes(key))||(module==='inventory'&&['name','location'].includes(key)))?<QuickEditableCell label={labelFor(module,key)} value={String(r.data[key]||'')} disabled={!editableRow(r)||pendingIds.includes(r.id)} onSave={v=>quickUpdate(r,{[key]:v})}/>:j===0?<strong className="cell-title">{displayCell(r,key)}</strong>:displayCell(r,key)}</td>)}<td className="cell-actions"><button className="iconbtn" title="Xem lịch sử thay đổi" onClick={()=>setHistoryRecord(r)}><History size={15}/></button>{module==='inventory'&&<button className="iconbtn" title="Mã QR" onClick={()=>void qrRecord(r)}><Printer size={15}/></button>}{editableRow(r)&&<><button className="iconbtn" title={tr("Sửa")} onClick={()=>setEditing(r)}><Pencil size={15}/></button><button className="iconbtn danger" title="Xóa" onClick={()=>void remove(r)}><Trash2 size={15}/></button></>}</td></tr>)}</tbody></table></div>}
     <div className="list-foot">{tr("Đang hiển thị")}<strong>{filtered.length}</strong> / {records.length} bản ghi <span>· {site.name}</span></div>
   </div>
   {editing!==undefined&&<RecordForm key={editing?.id||'new'} module={module} config={config} data={editing?.data||{}} onClose={()=>setEditing(undefined)} onSave={save} notify={notify}/>}

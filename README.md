@@ -1,3 +1,5 @@
+> **Phiên bản 0.4.0 — Quick Workflow.** Giảm số bước trong Daily Tasks, Checklists, Roster, Inventory và Projects, thêm Ctrl+K / Ctrl+N / tìm trong bảng, cập nhật hàng loạt an toàn. Xem [QUICK_WORKFLOW_V04.md](docs/QUICK_WORKFLOW_V04.md).
+
 > **Phiên bản 0.3.0** — Đã xử lý lỗi winCodeSign symbolic link cho build không ký số trên Windows 10 và thêm song ngữ Tiếng Việt / English. Xem [WINDOWS_BUILD_V03.md](docs/WINDOWS_BUILD_V03.md).
 
 # Lotus IT Command — Hotel IT Operations Desktop

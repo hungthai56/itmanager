@@ -32,6 +32,7 @@ async function dispatch(action,p){
     case 'permissions.save':return store.permissionsSave(p);
     case 'records.list':return store.recordsList(p);
     case 'records.save':return store.recordsSave(p);
+    case 'records.batchStatus':return store.recordsBatchStatus(p);
     case 'records.delete':return store.recordsDelete(p);
     case 'records.history':return store.recordsHistory(p);
     case 'checklist.mark':return store.checklistMark(p);
