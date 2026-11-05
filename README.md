@@ -1,3 +1,5 @@
+> **Phiên bản 0.3.0** — Đã xử lý lỗi winCodeSign symbolic link cho build không ký số trên Windows 10 và thêm song ngữ Tiếng Việt / English. Xem [WINDOWS_BUILD_V03.md](docs/WINDOWS_BUILD_V03.md).
+
 # Lotus IT Command — Hotel IT Operations Desktop
 
 **Version 0.2.0 · Electron + React + TypeScript + SQLite (sql.js)**

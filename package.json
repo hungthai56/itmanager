@@ -1,6 +1,6 @@
 {
   "name": "lotus-it-command",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Offline-first hotel IT operations desktop suite",
   "author": "Lotus IT",
@@ -46,7 +46,8 @@
       "dist/**/*",
       "electron/**/*",
       "package.json",
-      "assets/icon.ico"
+      "assets/icon.ico",
+      "assets/icon.png"
     ],
     "asar": true,
     "asarUnpack": [],
@@ -55,7 +56,9 @@
         "nsis"
       ],
       "artifactName": "Lotus-IT-Command-Setup-${version}.${ext}",
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "assets/icon.png",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
