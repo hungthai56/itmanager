@@ -67,6 +67,9 @@
     }
   },
   "overrides": {
-    "electron-to-chromium": "1.5.477"
+    "electron-to-chromium": "1.5.477",
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
   }
 }
