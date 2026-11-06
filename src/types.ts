@@ -4,6 +4,6 @@ export type Site={id:string;code:string;name:string;currency:string;created_at:s
 export type Account={id:string;username:string;name:string;role:Role;siteId:string;forceReset:boolean;overrides:Record<string,Record<string,string>>};
 export type AuthStatus={authenticated:boolean;ready?:boolean;user?:Account;sites?:Site[]};
 export type RecordItem={id:string;site_id:string;module:ModuleId;data:Record<string,string|number|boolean|undefined>;created_by:string;created_at:string;updated_at:string};
-export type UserItem={id:string;username:string;full_name:string;role:Role;active:number;force_reset:number;default_site_id:string;report_to:string;overrides:string;siteIds:string[]};
+export type UserItem={id:string;username:string;full_name:string;role:Role;active:number;account_locked:number;force_reset:number;default_site_id:string;report_to:string;overrides:string;siteIds:string[]};
 export type Dashboard={counts:Record<string,number|null>;openTasks:number;checksDone:number;checkTotal:number;expiringContracts:number;warrantySoon:number;recent:RecordItem[]};
 declare global {interface Window {lotus:{invoke:(action:string,payload?:Record<string,unknown>)=>Promise<any>}}}

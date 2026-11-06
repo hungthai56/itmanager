@@ -41,7 +41,7 @@ test('failed login attempts lock account, and good password needs at least 10 ch
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'lotus-it-auth-'));const store=new Store(root);
  try{await store.init();assert.throws(()=>store.setup({name:'Admin',username:'admin',password:'weak',siteName:'Hotel'}));store.setup({name:'Admin',username:'admin',password:'StrongPassword123',siteName:'Hotel'});
  for(let i=0;i<4;i++)assert.throws(()=>store.login({username:'admin',password:'wrong'}));
- assert.throws(()=>store.login({username:'admin',password:'wrong'}),/15 phút/);
+ assert.throws(()=>store.login({username:'admin',password:'wrong'}),/khóa/);
  assert.throws(()=>store.login({username:'admin',password:'StrongPassword123'}),/khóa/);
  }finally{store.db.close();fs.rmSync(root,{recursive:true,force:true});}
 });

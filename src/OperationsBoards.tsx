@@ -13,7 +13,7 @@ const periodKey=(date:string,freq:string)=>freq==='Weekly'?weekMonday(date):freq
 const safeMessage=(e:unknown)=>e instanceof Error?e.message:String(e);
 const frequencies=['Daily','Weekly','Monthly','Quarterly','Semiannual','Yearly','Custom'];
 const freqLabels:Record<string,string>={Daily:'Hằng ngày',Weekly:'Hằng tuần',Monthly:'Hằng tháng',Quarterly:'Hằng quý',Semiannual:'Nửa năm',Yearly:'Hằng năm',Custom:'Tùy chỉnh'};
-const shiftDefaults=[{code:'D',factor:1},{code:'N',factor:1},{code:'HD',factor:0.5},{code:'AL',factor:1},{code:'DO',factor:0}];
+const shiftDefaults=[{code:'D',factor:1},{code:'N',factor:1},{code:'HD',factor:0.5},{code:'AL',factor:0},{code:'DO',factor:0}];
 
 export function ChecklistBoard({site,records,config,editable,mutate,refresh,notify}:{site:Site;records:RecordItem[];config:Record<string,any>;editable:boolean;mutate:Mutate;refresh:()=>Promise<void>;notify:Notify}){
   const [date,setDate]=useState(isoToday());const [frequency,setFrequency]=useState('Daily');

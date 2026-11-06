@@ -30,7 +30,7 @@ function periodKey(date, frequency) {
   if(frequency==='Yearly')return date.slice(0,4);
   return date;
 }
-const DEFAULT_SHIFTS=[{code:'D',factor:1},{code:'N',factor:1},{code:'HD',factor:.5},{code:'AL',factor:1},{code:'DO',factor:0}];
+const DEFAULT_SHIFTS=[{code:'D',factor:1},{code:'N',factor:1},{code:'HD',factor:.5},{code:'AL',factor:0},{code:'DO',factor:0}];
 const DEFAULT_CHECKLISTS=[{name:'Kiểm tra Backup',frequency:'Daily'},{name:'Kiểm tra NAS / Server',frequency:'Daily'}];
 const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) => ({salt, hash: crypto.scryptSync(password, salt, 64).toString('hex')});
 const secureCompare = (a,b) => {
@@ -63,6 +63,8 @@ class Store {
     CREATE INDEX IF NOT EXISTS history_record_scope ON record_history(record_id,site_id,module,created_at);
     CREATE TABLE IF NOT EXISTS project_tasks(id TEXT PRIMARY KEY,site_id TEXT NOT NULL,project_id TEXT NOT NULL,title TEXT NOT NULL,owner TEXT,due_date TEXT,status TEXT NOT NULL,notes TEXT,created_by TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS project_tasks_scope ON project_tasks(site_id,project_id);`);
+    const userColumns=this.all('PRAGMA table_info(users)').map(c=>c.name);
+    if(!userColumns.includes('account_locked'))this.run('ALTER TABLE users ADD COLUMN account_locked INTEGER NOT NULL DEFAULT 0');
   }
   all(sql,p=[]) { const s=this.db.prepare(sql); try { s.bind(p); const a=[]; while(s.step()) a.push(s.getAsObject()); return a; } finally{s.free();} }
   one(sql,p=[]) { return this.all(sql,p)[0] || null; }
@@ -71,7 +73,7 @@ class Store {
   transact(fn) { this.db.run('BEGIN'); try { const res=fn(); this.db.run('COMMIT'); this.persist(); return res; } catch(e) {this.db.run('ROLLBACK');throw e;} }
   audit(action,site,details) {this.run('INSERT INTO audit VALUES(?,?,?,?,?,?,?)',[uuid(),this.session?.id??null,this.session?.username??null,action,site||null,JSON.stringify(details??{}),now()]);}
   get userCount() {return this.one('SELECT COUNT(*) n FROM users').n;}
-  info(){ return {ready:this.userCount>0, version:'0.4.0', dataPath:this.folder, modules:MODULES}; }
+  info(){ return {ready:this.userCount>0, version:'0.5.0', dataPath:this.folder, modules:MODULES}; }
   setup({name,username,password,siteName}) {
     if(this.userCount) throw new Error('Hệ thống đã được khởi tạo.');
     if(!name?.trim()||!username?.trim()||!siteName?.trim()||!passwordOkay(password)) throw new Error('Điền đủ thông tin. Mật khẩu phải từ 10 ký tự, có chữ và số.');
@@ -89,13 +91,14 @@ class Store {
     const u=this.one('SELECT * FROM users WHERE username=?',[username.toLowerCase().trim()]);
     if (!u) throw new Error('Tên đăng nhập hoặc mật khẩu không đúng.');
     if(!u.active) throw new Error('Tài khoản đã bị vô hiệu hóa.');
+    if(u.account_locked)throw new Error('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên để mở khóa.');
     if(u.locked_until && u.locked_until>now()) throw new Error('Tài khoản đang bị khóa tạm thời. Vui lòng thử lại sau.');
     const ok=secureCompare(crypto.scryptSync(password,u.salt,64).toString('hex'),u.password_hash);
     if (!ok) {
       const attempts=(u.locked_until&&u.locked_until<=now()?0:u.failed_attempts)+1;
-      const locked=attempts>=5?new Date(Date.now()+15*60000).toISOString():null;
-      this.transact(()=> {this.run('UPDATE users SET failed_attempts=?,locked_until=? WHERE id=?',[locked?0:attempts,locked,u.id]);this.run('INSERT INTO audit VALUES(?,?,?,?,?,?,?)',[uuid(),u.id,u.username,'LOGIN_FAILED',null,JSON.stringify({locked:!!locked}),now()]);});
-      throw new Error(locked?'Nhập sai 5 lần. Tài khoản bị khóa 15 phút.':`Sai mật khẩu. Còn ${5-attempts} lần thử.`);
+      const locked=attempts>=5;
+      this.transact(()=> {this.run('UPDATE users SET failed_attempts=?,locked_until=NULL,account_locked=? WHERE id=?',[attempts,locked?1:0,u.id]);this.run('INSERT INTO audit VALUES(?,?,?,?,?,?,?)',[uuid(),u.id,u.username,'LOGIN_FAILED',null,JSON.stringify({locked,attempts}),now()]);});
+      throw new Error(locked?'Nhập sai 5 lần. Tài khoản bị khóa cho đến khi quản trị viên mở khóa.':`Sai mật khẩu. Còn ${5-attempts} lần thử.`);
     }
     this.transact(()=>this.run('UPDATE users SET failed_attempts=0,locked_until=NULL WHERE id=?',[u.id]));
     this.session={id:u.id,username:u.username,name:u.full_name,role:u.role,forceReset:!!u.force_reset,siteId:u.default_site_id,overrides:JSON.parse(u.overrides||'{}')};
@@ -122,10 +125,25 @@ class Store {
   permissions(){this.requireAuth();return {role:this.session.role,rows:this.all('SELECT * FROM role_permissions ORDER BY role,module'),overrides:this.session.overrides};}
   permissionsSave({rows}){this.requireAdmin();if(!Array.isArray(rows))throw new Error('Dữ liệu không hợp lệ.');return this.transact(()=>{for(const r of rows){if(!ROLES.includes(r.role)||!MODULES.includes(r.module)||r.role==='SYS')continue;this.run('UPDATE role_permissions SET can_read=?,can_write=? WHERE role=? AND module=?',[r.can_read?1:0,r.can_write?1:0,r.role,r.module]);}this.audit('PERMISSIONS_UPDATE',null,{});return this.permissions();});}
   siteSave(s){this.requireAdmin();if(!s.name?.trim()||!s.code?.trim()||!s.currency?.trim())throw new Error('Thiếu tên, mã cơ sở hoặc tiền tệ.');return this.transact(()=>{const id=s.id||uuid();if(s.id){if(!this.one('SELECT id FROM sites WHERE id=?',[id]))throw new Error('Cơ sở không tồn tại.');this.run('UPDATE sites SET code=?,name=?,currency=? WHERE id=?',[s.code.trim().toUpperCase(),s.name.trim(),s.currency.trim().toUpperCase(),id]);}else this.run('INSERT INTO sites VALUES(?,?,?,?,?)',[id,s.code.trim().toUpperCase(),s.name.trim(),s.currency.trim().toUpperCase(),now()]);this.audit('SITE_SAVE',id,{code:s.code});return {id};});}
-  users(){this.requireAdmin();return this.all('SELECT id,username,full_name,role,active,force_reset,default_site_id,report_to,overrides,created_at FROM users ORDER BY full_name').map(u=>({...u,siteIds:this.all('SELECT site_id FROM user_sites WHERE user_id=?',[u.id]).map(r=>r.site_id)}));}
-  userSave(u){this.requireAdmin();if(!u.username?.trim()||!u.full_name?.trim()||!ROLES.includes(u.role))throw new Error('Thông tin nhân sự chưa hợp lệ.');if(!u.id&&!passwordOkay(u.password))throw new Error('Mật khẩu phải từ 10 ký tự, có chữ và số.');const allSites=this.all('SELECT id FROM sites').map(x=>x.id);const assigned=[...new Set((u.siteIds||[]).filter(x=>allSites.includes(x)))];if(!assigned.length)throw new Error('Cần cấp ít nhất một cơ sở.');return this.transact(()=>{const id=u.id||uuid();if(u.id){if(!this.one('SELECT id FROM users WHERE id=?',[id]))throw new Error('Không tìm thấy người dùng.');if(this.session.id===id&&(!u.active||u.role!=='SYS'))throw new Error('Không thể tự khóa hoặc hạ quyền quản trị của mình.');this.run('UPDATE users SET username=?,full_name=?,role=?,active=?,force_reset=?,default_site_id=?,report_to=?,overrides=? WHERE id=?',[u.username.trim().toLowerCase(),u.full_name.trim(),u.role,u.active?1:0,u.force_reset?1:0,assigned.includes(u.default_site_id)?u.default_site_id:assigned[0],u.report_to||null,JSON.stringify(u.overrides||{}),id]);}else{const h=hashPassword(u.password);this.run('INSERT INTO users(id,username,full_name,role,password_hash,salt,active,force_reset,default_site_id,report_to,overrides,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[id,u.username.trim().toLowerCase(),u.full_name.trim(),u.role,h.hash,h.salt,1,u.force_reset?1:0,assigned[0],u.report_to||null,JSON.stringify(u.overrides||{}),now()]);}this.run('DELETE FROM user_sites WHERE user_id=?',[id]);for(const sid of assigned)this.run('INSERT INTO user_sites VALUES(?,?)',[id,sid]);this.audit('USER_SAVE',null,{username:u.username,id});return{id};});}
-  userPassword({userId,password}){this.requireAdmin();if(!passwordOkay(password))throw new Error('Mật khẩu tối thiểu 10 ký tự, chứa chữ và số.');const h=hashPassword(password);return this.transact(()=>{this.run('UPDATE users SET password_hash=?,salt=?,force_reset=1,failed_attempts=0,locked_until=NULL WHERE id=?',[h.hash,h.salt,userId]);this.audit('USER_PASSWORD_RESET',null,{userId});return{success:true};});}
+  users(){this.requireAdmin();return this.all('SELECT id,username,full_name,role,active,account_locked,force_reset,default_site_id,report_to,overrides,created_at FROM users ORDER BY full_name').map(u=>({...u,siteIds:this.all('SELECT site_id FROM user_sites WHERE user_id=?',[u.id]).map(r=>r.site_id)}));}
+  userSave(u){this.requireAdmin();if(!u.username?.trim()||!u.full_name?.trim()||!ROLES.includes(u.role))throw new Error('Thông tin nhân sự chưa hợp lệ.');if(!u.id&&!passwordOkay(u.password))throw new Error('Mật khẩu phải từ 10 ký tự, có chữ và số.');const allSites=this.all('SELECT id FROM sites').map(x=>x.id);const assigned=[...new Set((u.siteIds||[]).filter(x=>allSites.includes(x)))];if(!assigned.length)throw new Error('Cần cấp ít nhất một cơ sở.');return this.transact(()=>{const id=u.id||uuid();if(u.id){if(!this.one('SELECT id FROM users WHERE id=?',[id]))throw new Error('Không tìm thấy người dùng.');if(this.session.id===id&&(!u.active||u.role!=='SYS'))throw new Error('Không thể tự khóa hoặc hạ quyền quản trị của mình.');this.run('UPDATE users SET username=?,full_name=?,role=?,active=?,account_locked=?,failed_attempts=?,locked_until=NULL,force_reset=?,default_site_id=?,report_to=?,overrides=? WHERE id=?',[u.username.trim().toLowerCase(),u.full_name.trim(),u.role,u.active?1:0,u.account_locked?1:0,u.account_locked?5:0,u.force_reset?1:0,assigned.includes(u.default_site_id)?u.default_site_id:assigned[0],u.report_to||null,JSON.stringify(u.overrides||{}),id]);}else{const h=hashPassword(u.password);this.run('INSERT INTO users(id,username,full_name,role,password_hash,salt,active,force_reset,default_site_id,report_to,overrides,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[id,u.username.trim().toLowerCase(),u.full_name.trim(),u.role,h.hash,h.salt,1,u.force_reset?1:0,assigned.includes(u.default_site_id)?u.default_site_id:assigned[0],u.report_to||null,JSON.stringify(u.overrides||{}),now()]);}this.run('DELETE FROM user_sites WHERE user_id=?',[id]);for(const sid of assigned)this.run('INSERT INTO user_sites VALUES(?,?)',[id,sid]);this.audit('USER_SAVE',null,{username:u.username,id});return{id};});}
+  userPassword({userId,password}){this.requireAdmin();if(!passwordOkay(password))throw new Error('Mật khẩu tối thiểu 10 ký tự, chứa chữ và số.');const h=hashPassword(password);return this.transact(()=>{this.run('UPDATE users SET password_hash=?,salt=?,force_reset=1,failed_attempts=0,locked_until=NULL,account_locked=0 WHERE id=?',[h.hash,h.salt,userId]);this.audit('USER_PASSWORD_RESET',null,{userId});return{success:true};});}
   changePassword({oldPassword,newPassword}){this.requireAuth();if(!passwordOkay(newPassword))throw new Error('Mật khẩu mới tối thiểu 10 ký tự, gồm chữ và số.');const u=this.one('SELECT * FROM users WHERE id=?',[this.session.id]);const old=crypto.scryptSync(oldPassword||'',u.salt,64).toString('hex');if(!secureCompare(old,u.password_hash))throw new Error('Mật khẩu cũ không đúng.');const h=hashPassword(newPassword);return this.transact(()=>{this.run('UPDATE users SET password_hash=?,salt=?,force_reset=0 WHERE id=?',[h.hash,h.salt,u.id]);this.session.forceReset=false;this.audit('PASSWORD_CHANGED',null,{});return{success:true};});}
+  canManageRecord(record,module){
+    if(this.session.role==='SYS'||this.session.role==='MANAGER')return true;
+    if(record.created_by===this.session.id)return true;
+    if(this.session.role==='STAFF')return false;
+    if(module!=='tasks'||this.session.role!=='SUPERVISOR')return true;
+    const owner=this.one('SELECT role,report_to FROM users WHERE id=?',[record.created_by]);
+    if(owner?.role==='STAFF'&&owner.report_to===this.session.id)return true;
+    const assigned=String(JSON.parse(record.data).assignedTo||'').trim().toLowerCase();
+    if(!assigned)return false;
+    return this.all('SELECT id,username,full_name FROM users WHERE role=? AND report_to=?',['STAFF',this.session.id])
+      .some(u=>[u.id,u.username,u.full_name.toLowerCase()].includes(assigned));
+  }
+  ensureManageRecord(record,module){
+    if(!this.canManageRecord(record,module))throw new Error('Bạn chỉ được sửa công việc của mình hoặc nhân viên trực thuộc (quyền của mình).');
+  }
   recordsList({module,siteId}){this.check(module,siteId,'read');return this.all('SELECT * FROM records WHERE module=? AND site_id=? ORDER BY updated_at DESC',[module,siteId]).map(x=>({...x,data:JSON.parse(x.data)}));}
   historyWrite({id,siteId,module,action,before,after}){
     this.run('INSERT INTO record_history VALUES(?,?,?,?,?,?,?,?,?)',[uuid(),id,siteId,module,action,before||null,after||null,this.session.username,now()]);
@@ -153,7 +171,7 @@ class Store {
       const id=record.id||uuid();
       const old=record.id?this.one('SELECT * FROM records WHERE id=? AND site_id=? AND module=?',[id,siteId,module]):null;
       if(record.id&&!old)throw new Error('Không tìm thấy bản ghi ở cơ sở này.');
-      if(old&&this.session.role==='STAFF'&&old.created_by!==this.session.id)throw new Error('Nhân viên chỉ được sửa bản ghi của mình.');
+      if(old)this.ensureManageRecord(old,module);
       if(old)this.run('UPDATE records SET data=?,updated_at=? WHERE id=?',[raw,now(),id]);
       else this.run('INSERT INTO records VALUES(?,?,?,?,?,?,?)',[id,siteId,module,raw,this.session.id,now(),now()]);
       this.historyWrite({id,siteId,module,action:old?'UPDATE':'CREATE',before:old?.data,after:raw});
@@ -169,7 +187,7 @@ class Store {
     // Pre-validate all records, site isolation, and STAFF ownership before any write.
     const originals=unique.map(id=>this.one('SELECT * FROM records WHERE id=? AND site_id=? AND module=?',[id,siteId,module]));
     if(originals.some(row=>!row))throw new Error('Có bản ghi không tồn tại trong cơ sở này.');
-    if(this.session.role==='STAFF'&&originals.some(row=>row.created_by!==this.session.id))throw new Error('Nhân viên chỉ được cập nhật bản ghi của mình.');
+    for(const row of originals)this.ensureManageRecord(row,module);
     return this.transact(()=>{
       let updated=0;
       for(const old of originals){
@@ -188,7 +206,7 @@ class Store {
     this.check(module,siteId,'write');
     const old=this.one('SELECT * FROM records WHERE id=? AND module=? AND site_id=?',[id,module,siteId]);
     if(!old)throw new Error('Không tìm thấy bản ghi.');
-    if(this.session.role==='STAFF'&&old.created_by!==this.session.id)throw new Error('Không được xóa bản ghi người khác.');
+    this.ensureManageRecord(old,module);
     return this.transact(()=>{
       if(module==='projects')this.run('DELETE FROM project_tasks WHERE project_id=? AND site_id=?',[id,siteId]);
       this.historyWrite({id,siteId,module,action:'DELETE',before:old.data});
