@@ -13,7 +13,7 @@ try {
     }
     if($path==='/api/v1/health' && ($_SERVER['REQUEST_METHOD']??'')==='GET'){
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok'=>true,'service'=>'Lotus IT API','version'=>'0.6.0']);exit;
+        echo json_encode(['ok'=>true,'service'=>'Lotus IT API','version'=>'0.6.2']);exit;
     }
     if(!in_array($path,['/api/v1/dispatch','/api/v1/csrf'],true))throw new ApiError('Not found',404);
     $auth=new Auth();

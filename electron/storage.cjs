@@ -88,7 +88,7 @@ class Store {
   transact(fn) { this.db.run('BEGIN'); try { const res=fn(); this.db.run('COMMIT'); this.persist(); return res; } catch(e) {this.db.run('ROLLBACK');throw e;} }
   audit(action,site,details) {this.run('INSERT INTO audit VALUES(?,?,?,?,?,?,?)',[uuid(),this.session?.id??null,this.session?.username??null,action,site||null,JSON.stringify(details??{}),now()]);}
   get userCount() {return this.one('SELECT COUNT(*) n FROM users').n;}
-  info(){ return {ready:this.userCount>0, version:'0.6.1', dataPath:this.folder, modules:MODULES}; }
+  info(){ return {ready:this.userCount>0, version:'0.6.2', dataPath:this.folder, modules:MODULES}; }
   setup({name,username,password,siteName}) {
     if(this.userCount) throw new Error('Hệ thống đã được khởi tạo.');
     if(!name?.trim()||!username?.trim()||!siteName?.trim()||!passwordOkay(password)) throw new Error('Điền đủ thông tin. Mật khẩu phải từ 10 ký tự, có chữ và số.');

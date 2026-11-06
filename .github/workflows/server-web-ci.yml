@@ -1,5 +1,15 @@
 name: Server API checks and web build
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'src/**'
+      - '.github/workflows/server-web-ci.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'index.html'
+      - 'vite.config.ts'
   push:
     branches: [main]
     paths:
@@ -7,9 +17,13 @@ on:
       - 'src/**'
       - '.github/workflows/server-web-ci.yml'
       - 'package.json'
+      - 'package-lock.json'
       - 'index.html'
       - 'vite.config.ts'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   php-mysql-integration:
@@ -33,6 +47,7 @@ jobs:
       LOTUS_DB_NAME: lotus_ci
       LOTUS_DB_USER: lotus_ci
       LOTUS_DB_PASSWORD: CI_only_local_password
+      LOTUS_TEST_DATABASE: '1'
     steps:
       - uses: actions/checkout@v4
       - name: PHP runtime and PDO MySQL
@@ -49,6 +64,10 @@ jobs:
           printf 'CI Hotel\nciadmin\nCI Admin\nCIPassword_123456\n' | php server/bin/setup.php
       - name: Test token handling, site isolation, version conflicts, and roles
         run: php server/tests/integration.php
+      - name: Test password reset, browser session revocation, and timezone-independent throttling
+        run: php server/tests/auth-security.php
+      - name: Test concurrent parent deletion and child writes
+        run: php server/tests/concurrency.php
   web-bundle:
     name: Build static React web portal + PHP deployment package
     runs-on: ubuntu-latest
@@ -59,7 +78,7 @@ jobs:
           node-version: '22'
       - name: Build browser app
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npm run build:web
       - name: Create deployable server archive (no secrets)
         run: |

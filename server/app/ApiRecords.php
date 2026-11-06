@@ -38,8 +38,9 @@ trait ApiRecords {
     }
     private function recordsDelete(array $p): array {
         [$module,$site]=$this->mod($p,'write');$id=$this->payload($p,'id',36);
-        return transactional(function()use($module,$site,$id){
+        return transactional(function()use($module,$site,$id,$p){
             $old=$this->record($module,$site,$id,true);$this->auth->manageRecord($old,$module);
+            if(!isset($p['version'])||!is_int($p['version'])||$p['version']!==(int)$old['version'])throw new ApiError('Record was changed by another operator. Refresh before deleting.',409);
             if($module==='projects')query('DELETE FROM project_tasks WHERE site_id=? AND project_id=?',[$site,$id]);
             if($module==='contracts')query('DELETE FROM contract_addenda WHERE site_id=? AND contract_id=?',[$site,$id]);
             $this->history($old,'DELETE',jsonArray($old['data']),null);

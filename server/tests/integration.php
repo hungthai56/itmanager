@@ -40,6 +40,38 @@ deny(fn()=> $api->run('contract.addenda.save',['siteId'=>$site,'contractId'=>$co
 $api->run('contract.addenda.save',['siteId'=>$site,'contractId'=>$contract,'addendum'=>['id'=>$add,'version'=>1,'addendum_no'=>'A1','new_end_date'=>'2028-12-31']]);
 ok($api->run('records.list',['siteId'=>$site,'module'=>'contracts'])[0]['effectiveEndDate']==='2028-12-31','contract effective end from latest addendum');
 
+// A stale screen must never delete another operator's updated parent or its children.
+foreach (['projects'=>['name'=>'Delete regression project','progress'=>0],
+          'contracts'=>['name'=>'Delete regression contract','endDate'=>'2027-12-31']] as $module=>$data) {
+    $parent=$api->run('records.save',['siteId'=>$site,'module'=>$module,'record'=>['data'=>$data]]);
+    $parentId=$parent['id'];
+    if($module==='projects') {
+        $api->run('project.tasks.save',['siteId'=>$site,'projectId'=>$parentId,'task'=>['title'=>'Retain until current delete','status'=>'Not Started']]);
+        $childTable='project_tasks';$parentColumn='project_id';
+    } else {
+        $api->run('contract.addenda.save',['siteId'=>$site,'contractId'=>$parentId,'addendum'=>['addendum_no'=>'DELETE-REGRESSION','new_end_date'=>'2028-12-31']]);
+        $childTable='contract_addenda';$parentColumn='contract_id';
+    }
+    $current=$api->run('records.save',['siteId'=>$site,'module'=>$module,'record'=>[
+        'id'=>$parentId,'version'=>$parent['version'],'data'=>[...$data,'name'=>'Updated by another operator']]]);
+    $before=query('SELECT * FROM records WHERE id=?',[$parentId])->fetch();
+    $children=query("SELECT * FROM $childTable WHERE $parentColumn=? ORDER BY id",[$parentId])->fetchAll();
+    $history=query('SELECT * FROM record_history WHERE record_id=? ORDER BY id',[$parentId])->fetchAll();
+    $deleteAuditCount=(int)query("SELECT COUNT(*) AS n FROM audit WHERE action='RECORD_DELETE' AND JSON_UNQUOTE(JSON_EXTRACT(details,'$.id'))=?",[$parentId])->fetch()['n'];
+    foreach ([[],['version'=>$parent['version']]] as $versionPayload) {
+        deny(fn()=> $api->run('records.delete',[...$versionPayload,'siteId'=>$site,'module'=>$module,'id'=>$parentId]),409);
+        ok(query('SELECT * FROM records WHERE id=?',[$parentId])->fetch()===$before,"$module parent unchanged after rejected delete");
+        ok(query("SELECT * FROM $childTable WHERE $parentColumn=? ORDER BY id",[$parentId])->fetchAll()===$children,"$module children unchanged after rejected delete");
+        ok(query('SELECT * FROM record_history WHERE record_id=? ORDER BY id',[$parentId])->fetchAll()===$history,"$module history unchanged after rejected delete");
+        ok((int)query("SELECT COUNT(*) AS n FROM audit WHERE action='RECORD_DELETE' AND JSON_UNQUOTE(JSON_EXTRACT(details,'$.id'))=?",[$parentId])->fetch()['n']===$deleteAuditCount,"$module rejected delete has no success audit");
+    }
+    $api->run('records.delete',['siteId'=>$site,'module'=>$module,'id'=>$parentId,'version'=>$current['version']]);
+    ok(!query('SELECT id FROM records WHERE id=?',[$parentId])->fetch(),"$module current version can be deleted");
+    ok(query("SELECT * FROM $childTable WHERE $parentColumn=?",[$parentId])->fetchAll()===[],"$module current delete removes children");
+    $deletedHistory=query("SELECT * FROM record_history WHERE record_id=? AND action='DELETE'",[$parentId])->fetchAll();
+    ok(count($deletedHistory)===1&&jsonArray($deletedHistory[0]['before_data'])===jsonArray($before['data']),"$module delete records the latest data in history");
+}
+
 $auth->logout();unset($_SERVER['HTTP_AUTHORIZATION']);
 $auth2=new Auth();$login2=$auth2->login('cistaff','StaffPassword12345',true);$_SERVER['HTTP_AUTHORIZATION']='Bearer '.$login2['bearerToken'];
 $auth3=new Auth();$api3=new Api($auth3);

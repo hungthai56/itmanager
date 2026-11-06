@@ -76,7 +76,7 @@ export default function App(){
  const pageTitle=tr(moduleIds.includes(screen as ModuleId)?modules[screen as ModuleId].title:screenNames[screen]||screen);
  return <div className="app">
   <aside className={cn('sidebar',sidebarOpen&&'mobile-show')}>
-    <div className="brand"><div className="brand-icon"><Activity size={22}/></div><div><strong>LOTUS<span> IT</span></strong><small>COMMAND CENTER <b>v0.6.1</b></small></div></div>
+    <div className="brand"><div className="brand-icon"><Activity size={22}/></div><div><strong>LOTUS<span> IT</span></strong><small>COMMAND CENTER <b>v0.6.2</b></small></div></div>
     <div className="sidebar-site">{tr("WORKSPACE")}<span className="offline-pill"><CloudOff size={12}/>{tr(serverMode?'Máy chủ':'Offline')}</span></div>
     <div className="side-scroll">
       <div className="navgroup"><div className="navlabel">{tr("OVERVIEW")}</div>{menuItem('dashboard',tr('Dashboard'))}{canAdmin&&menuItem('cluster',tr('Cluster Overview'))}</div>
@@ -263,7 +263,7 @@ function ModuleScreen({module,site,user,action,notify,openNewToken}:{module:Modu
  }
  const quietMutate=async(fn:()=>Promise<unknown>,message?:string)=>{try{await fn();if(message)notify(tr(message))}catch(e){notify(err(e),true)}};
  async function exportExcel(){await action(async()=>{const result=await api<{cancelled?:boolean}>('reports.export',{module,siteId:site.id,columns:spec.fields.filter(f=>f.type!=='textarea').map(f=>f.key),ids:filtered.map(r=>r.id),labels:Object.fromEntries(spec.fields.map(f=>[f.key,tr(f.label)]))});if(!result.cancelled)notify(tr('Đã xuất file Excel thành công.'))})}
- async function remove(r:RecordItem){if(!window.confirm(`Xóa ${tr(spec.singular)} "${firstTitle(r)}"? Hành động này không thể hoàn tác.`))return;await action(async()=>{await api('records.delete',{module,siteId:site.id,id:r.id});await refresh()},'Đã xóa bản ghi.')}
+ async function remove(r:RecordItem){if(!window.confirm(`Xóa ${tr(spec.singular)} "${firstTitle(r)}"? Hành động này không thể hoàn tác.`))return;await action(async()=>{await api('records.delete',{module,siteId:site.id,id:r.id,version:r.version});await refresh()},'Đã xóa bản ghi.')}
  async function save(form:Record<string,string|number|boolean|undefined>){await action(async()=>{await api('records.save',{module,siteId:site.id,record:{id:editing?.id,version:editing?.version,data:form}});setEditing(undefined);await refresh()},'Đã lưu dữ liệu thành công.')}
  async function qrRecord(r:RecordItem){const code=String(r.data.assetCode||r.id);const src=await QRCode.toDataURL(JSON.stringify({app:'Lotus IT Command',siteCode:site.code,assetCode:code}),{width:240,margin:2});setQrView({code,name:firstTitle(r),src})}
  async function printQrs(){await action(async()=>{await api('qr.print',{siteId:site.id,ids:selected});setSelected([])},'Đã mở cửa sổ tem QR. Nhấn Ctrl+P để in.')}

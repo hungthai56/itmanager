@@ -31,10 +31,15 @@ final class Auth {
             if (!isset($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(32));
             if (isset($_SESSION['user_id'],$_SESSION['last_active']) && (time()-(int)$_SESSION['last_active'] <= 8*3600)) {
                 $u=query('SELECT * FROM users WHERE id=? AND active=1 AND account_locked=0',[$_SESSION['user_id']])->fetch();
-                $this->principal=$u ?: null;
-                $_SESSION['last_active']=time();
+                $fingerprint=$_SESSION['password_fingerprint']??null;
+                // A password change invalidates every browser session, including those on other PCs.
+                // Sessions created before this stamp existed must authenticate again.
+                if ($u && is_string($fingerprint) && hash_equals(hash('sha256',$u['password_hash']),$fingerprint)) {
+                    $this->principal=$u;
+                    $_SESSION['last_active']=time();
+                }
             }
-            if (!$this->principal) unset($_SESSION['user_id']);
+            if (!$this->principal) unset($_SESSION['user_id'],$_SESSION['password_fingerprint'],$_SESSION['last_active'],$_SESSION['site_id']);
             if (isset($_SESSION['rotated']) && time()-$_SESSION['rotated']>1800) {
                 session_regenerate_id(true);$_SESSION['rotated']=time();
             }
@@ -56,6 +61,9 @@ final class Auth {
     public function principal(): array {
         if (!$this->principal)throw new ApiError('Please sign in',401);
         return $this->principal;
+    }
+    public function assertPasswordChanged(): void {
+        if ($this->principal()['force_reset'])throw new ApiError('Password change required',403);
     }
     public function siteList(): array {
         $u=$this->principal();
@@ -94,7 +102,10 @@ final class Auth {
         }
         throw new ApiError('You cannot change this record',403);
     }
-    public function admin(): void { if ($this->principal()['role']!=='SYS')throw new ApiError('System admin required',403); }
+    public function admin(): void {
+        $this->assertPasswordChanged();
+        if ($this->principal()['role']!=='SYS')throw new ApiError('System admin required',403);
+    }
     public function status(): array {
         if (!$this->principal)return ['authenticated'=>false,'ready'=>true];
         $u=$this->principal();
@@ -112,9 +123,12 @@ final class Auth {
         $finger=hash('sha256',$remote.'|'.$username);
          $result=transactional(function()use($username,$password,$finger,$desktopRequest){
             $throttle=query('SELECT * FROM login_throttle WHERE fingerprint=? FOR UPDATE',[$finger])->fetch();
-            if ($throttle && (strtotime($throttle['window_start'])+900)>time() && (int)$throttle['attempts']>=20)
+            // MySQL stores UTC DATETIME values; never interpret them in the host's PHP timezone.
+            $windowStart=$throttle ? new DateTimeImmutable($throttle['window_start'],new DateTimeZone('UTC')) : null;
+            $windowActive=$windowStart!==null && $windowStart->getTimestamp()+900>time();
+            if ($windowActive && (int)$throttle['attempts']>=20)
                 throw new ApiError('Too many requests',429);
-            if (!$throttle || strtotime($throttle['window_start'])+900<=time())query('INSERT INTO login_throttle (fingerprint,attempts,window_start) VALUES (?,0,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE attempts=0,window_start=UTC_TIMESTAMP(6)',[$finger]);
+            if (!$windowActive)query('INSERT INTO login_throttle (fingerprint,attempts,window_start) VALUES (?,0,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE attempts=0,window_start=UTC_TIMESTAMP(6)',[$finger]);
             query('UPDATE login_throttle SET attempts=attempts+1 WHERE fingerprint=?',[$finger]);
             $u=query('SELECT * FROM users WHERE username=? FOR UPDATE',[$username])->fetch();
             if (!$u || !$u['active'] || $u['account_locked']) {
@@ -138,6 +152,7 @@ final class Auth {
             }
             session_regenerate_id(true);
             $_SESSION['user_id']=$u['id'];$_SESSION['last_active']=time();$_SESSION['rotated']=time();
+            $_SESSION['password_fingerprint']=hash('sha256',$u['password_hash']);
             $_SESSION['csrf']=bin2hex(random_bytes(32));
             return ['csrf'=>$_SESSION['csrf'],'status'=>$this->status()];
         });
@@ -162,7 +177,7 @@ final class Auth {
             query('UPDATE access_tokens SET revoked_at=UTC_TIMESTAMP(6) WHERE user_id=?',[$u['id']]);
             audit($u,'PASSWORD_CHANGED',null,[]);
         });
-        $this->principal=null;if(!$this->desktop){unset($_SESSION['user_id']);}
+        $this->principal=null;if(!$this->desktop){unset($_SESSION['user_id'],$_SESSION['password_fingerprint']);}
         return ['success'=>true,'requiresRelogin'=>true];
     }
 }

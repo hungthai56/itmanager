@@ -70,8 +70,11 @@ final class Api {
     }
     private function parseModuleRow(array $row): array {return [...$row,'data'=>jsonArray($row['data'])];}
     public function run(string $action,array $p): mixed {
+        if (!in_array($action,['app.info','auth.status','auth.login','auth.logout','auth.changePassword'],true)) {
+            $this->auth->assertPasswordChanged();
+        }
         switch ($action) {
-            case 'app.info': return ['version'=>'0.6.0','mode'=>'server','modules'=>Auth::MODULES];
+            case 'app.info': return ['version'=>'0.6.2','mode'=>'server','modules'=>Auth::MODULES];
             case 'auth.status': return $this->auth->status();
             case 'auth.login': return $this->auth->login($this->payload($p,'username',100),$this->payload($p,'password',1024),($_SERVER['HTTP_X_LOTUS_CLIENT']??'')==='desktop');
             case 'auth.logout': return $this->auth->logout();
@@ -187,12 +190,12 @@ final class Api {
     }
     private function projectTaskSave(array $p): array {
         $site=$this->site($p);$this->auth->module('projects',$site,'write');$project=$this->payload($p,'projectId',36);
-        $this->auth->manageRecord($this->record('projects',$site,$project),'projects');
         $data=$p['task']??null;if(!is_array($data))throw new ApiError('Invalid task',422);
         $title=$this->payload($data,'title',250);$status=$this->payload($data,'status',30);$due=assertDate($data['due_date']??null);
         if($title===''||!in_array($status,['Not Started','In Progress','Blocked','Done'],true))throw new ApiError('Invalid task',422);
         $id=$this->payload($data,'id',36) ?: uuid();
         return transactional(function()use($id,$site,$project,$data,$title,$status,$due){
+            $this->auth->manageRecord($this->record('projects',$site,$project,true),'projects');
             $old=query('SELECT * FROM project_tasks WHERE id=? AND site_id=? AND project_id=? FOR UPDATE',[$id,$site,$project])->fetch();
             if(!empty($data['id'])&&!$old)throw new ApiError('Task not found',404);
             if($old&&(!isset($data['version'])||(int)$data['version']!==(int)$old['version']))throw new ApiError('Task changed on another device. Refresh and retry.',409);
@@ -205,8 +208,8 @@ final class Api {
     }
     private function projectTaskDelete(array $p): array {
         $site=$this->site($p);$this->auth->module('projects',$site,'write');$project=$this->payload($p,'projectId',36);$id=$this->payload($p,'id',36);
-        $this->auth->manageRecord($this->record('projects',$site,$project),'projects');
         return transactional(function()use($site,$project,$id,$p){
+            $this->auth->manageRecord($this->record('projects',$site,$project,true),'projects');
             $row=query('SELECT id,version FROM project_tasks WHERE id=? AND project_id=? AND site_id=? FOR UPDATE',[$id,$project,$site])->fetch();
             if(!$row)throw new ApiError('Task not found',404);
             if(!isset($p['version'])||(int)$p['version']!==(int)$row['version'])throw new ApiError('Task changed on another device. Refresh and retry.',409);
@@ -221,13 +224,13 @@ final class Api {
     }
     private function addendaSave(array $p): array {
         $site=$this->site($p);$this->auth->module('contracts',$site,'write');$contract=$this->payload($p,'contractId',36);
-        $parent=$this->record('contracts',$site,$contract);$this->auth->manageRecord($parent,'contracts');
         $a=$p['addendum']??null;if(!is_array($a))throw new ApiError('Invalid addendum',422);
         $id=$this->payload($a,'id',36)?:uuid();$number=$this->payload($a,'addendum_no',120);
         $signed=assertDate($a['signed_date']??null);$start=assertDate($a['new_start_date']??null);$end=assertDate($a['new_end_date']??null);
         $amount=$a['amount']??0;
         if(!$number||!$end||!is_numeric($amount)||!is_finite((float)$amount)||abs((float)$amount)>1e15)throw new ApiError('Invalid addendum',422);
-        return transactional(function()use($id,$site,$contract,$a,$number,$signed,$start,$end,$amount,$parent){
+        return transactional(function()use($id,$site,$contract,$a,$number,$signed,$start,$end,$amount){
+            $parent=$this->record('contracts',$site,$contract,true);$this->auth->manageRecord($parent,'contracts');
             $old=query('SELECT id,version FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=? FOR UPDATE',[$id,$site,$contract])->fetch();
             if(!empty($a['id'])&&!$old)throw new ApiError('Addendum not found',404);
             if($old&&(!isset($a['version'])||(int)$a['version']!==(int)$old['version']))throw new ApiError('Addendum changed on another device. Refresh and retry.',409);
@@ -240,8 +243,8 @@ final class Api {
     }
     private function addendaDelete(array $p): array {
         $site=$this->site($p);$this->auth->module('contracts',$site,'write');$contract=$this->payload($p,'contractId',36);$id=$this->payload($p,'id',36);
-        $this->auth->manageRecord($this->record('contracts',$site,$contract),'contracts');
         return transactional(function()use($site,$contract,$id,$p){
+            $this->auth->manageRecord($this->record('contracts',$site,$contract,true),'contracts');
             $old=query('SELECT id,version FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=? FOR UPDATE',[$id,$site,$contract])->fetch();
             if(!$old)throw new ApiError('Addendum not found',404);
             if(!isset($p['version'])||(int)$p['version']!==(int)$old['version'])throw new ApiError('Addendum changed on another device. Refresh and retry.',409);
