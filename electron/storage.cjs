@@ -62,7 +62,9 @@ class Store {
     this.db.run(`CREATE TABLE IF NOT EXISTS record_history(id TEXT PRIMARY KEY,record_id TEXT NOT NULL,site_id TEXT NOT NULL,module TEXT NOT NULL,action TEXT NOT NULL,before_data TEXT,after_data TEXT,username TEXT,created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS history_record_scope ON record_history(record_id,site_id,module,created_at);
     CREATE TABLE IF NOT EXISTS project_tasks(id TEXT PRIMARY KEY,site_id TEXT NOT NULL,project_id TEXT NOT NULL,title TEXT NOT NULL,owner TEXT,due_date TEXT,status TEXT NOT NULL,notes TEXT,created_by TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
-    CREATE INDEX IF NOT EXISTS project_tasks_scope ON project_tasks(site_id,project_id);`);
+    CREATE INDEX IF NOT EXISTS project_tasks_scope ON project_tasks(site_id,project_id);
+    CREATE TABLE IF NOT EXISTS contract_addenda(id TEXT PRIMARY KEY,site_id TEXT NOT NULL,contract_id TEXT NOT NULL,addendum_no TEXT NOT NULL,signed_date TEXT,new_start_date TEXT,new_end_date TEXT NOT NULL,amount REAL NOT NULL DEFAULT 0,summary TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS contract_addenda_scope ON contract_addenda(site_id,contract_id,new_end_date);`);
     const userColumns=this.all('PRAGMA table_info(users)').map(c=>c.name);
     if(!userColumns.includes('account_locked'))this.run('ALTER TABLE users ADD COLUMN account_locked INTEGER NOT NULL DEFAULT 0');
   }
@@ -144,7 +146,7 @@ class Store {
   ensureManageRecord(record,module){
     if(!this.canManageRecord(record,module))throw new Error('Bạn chỉ được sửa công việc của mình hoặc nhân viên trực thuộc (quyền của mình).');
   }
-  recordsList({module,siteId}){this.check(module,siteId,'read');return this.all('SELECT * FROM records WHERE module=? AND site_id=? ORDER BY updated_at DESC',[module,siteId]).map(x=>({...x,data:JSON.parse(x.data)}));}
+  recordsList({module,siteId}){this.check(module,siteId,'read');return this.all('SELECT * FROM records WHERE module=? AND site_id=? ORDER BY updated_at DESC',[module,siteId]).map(x=>({...x,data:JSON.parse(x.data),can_edit:this.canManageRecord(x,module),...(module==='contracts'?{effectiveEndDate:this.contractEffectiveEnd(x.id,siteId,JSON.parse(x.data).endDate)}:{})}));}
   historyWrite({id,siteId,module,action,before,after}){
     this.run('INSERT INTO record_history VALUES(?,?,?,?,?,?,?,?,?)',[uuid(),id,siteId,module,action,before||null,after||null,this.session.username,now()]);
   }
@@ -208,7 +210,7 @@ class Store {
     if(!old)throw new Error('Không tìm thấy bản ghi.');
     this.ensureManageRecord(old,module);
     return this.transact(()=>{
-      if(module==='projects')this.run('DELETE FROM project_tasks WHERE project_id=? AND site_id=?',[id,siteId]);
+      if(module==='projects')this.run('DELETE FROM project_tasks WHERE project_id=? AND site_id=?',[id,siteId]);if(module==='contracts')this.run('DELETE FROM contract_addenda WHERE contract_id=? AND site_id=?',[id,siteId]);
       this.historyWrite({id,siteId,module,action:'DELETE',before:old.data});
       this.run('DELETE FROM records WHERE id=? AND module=? AND site_id=?',[id,module,siteId]);
       this.audit('RECORD_DELETE',siteId,{module,id});return{success:true};
@@ -258,6 +260,45 @@ class Store {
       this.audit('ROSTER_BATCH',siteId,{employee:name,dates:dates.length,shift});return {count:dates.length};
     });
   }
+  contractMaster(siteId,contractId){
+    const c=this.one('SELECT * FROM records WHERE id=? AND site_id=? AND module=?',[contractId,siteId,'contracts']);
+    if(!c)throw new Error('Không tìm thấy hợp đồng gốc trong cơ sở này.');
+    return c;
+  }
+  contractEffectiveEnd(contractId,siteId,originalDate){
+    const dates=[originalDate,...this.all('SELECT new_end_date FROM contract_addenda WHERE contract_id=? AND site_id=?',[contractId,siteId]).map(a=>a.new_end_date)].filter(isoDay);
+    return dates.length?dates.sort().at(-1):'';
+  }
+  contractAddendaList({siteId,contractId}){
+    this.check('contracts',siteId,'read');this.contractMaster(siteId,contractId);
+    return this.all('SELECT * FROM contract_addenda WHERE site_id=? AND contract_id=? ORDER BY new_end_date DESC,created_at DESC',[siteId,contractId]);
+  }
+  contractAddendumSave({siteId,contractId,addendum}){
+    this.check('contracts',siteId,'write');
+    const original=this.contractMaster(siteId,contractId);
+    this.ensureManageRecord(original,'contracts');
+    if(!addendum||typeof addendum.addendum_no!=='string'||!addendum.addendum_no.trim()||!isoDay(addendum.new_end_date))
+      throw new Error('Cần số phụ lục và ngày kết thúc mới hợp lệ.');
+    if(addendum.signed_date&&!isoDay(addendum.signed_date))throw new Error('Ngày ký không hợp lệ.');
+    if(addendum.new_start_date&&!isoDay(addendum.new_start_date))throw new Error('Ngày bắt đầu không hợp lệ.');
+    if(!Number.isFinite(Number(addendum.amount||0)))throw new Error('Giá trị phụ lục không hợp lệ.');
+    const old=addendum.id?this.one('SELECT * FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=?',[addendum.id,siteId,contractId]):null;
+    if(addendum.id&&!old)throw new Error('Phụ lục không thuộc hợp đồng này.');
+    const id=old?.id||uuid(),ts=now();
+    const values=[addendum.addendum_no.trim(),addendum.signed_date||'',addendum.new_start_date||'',addendum.new_end_date,Number(addendum.amount||0),String(addendum.summary||'').slice(0,5000)];
+    return this.transact(()=>{
+      if(old)this.run('UPDATE contract_addenda SET addendum_no=?,signed_date=?,new_start_date=?,new_end_date=?,amount=?,summary=?,updated_at=? WHERE id=? AND site_id=? AND contract_id=?',[...values,ts,id,siteId,contractId]);
+      else this.run('INSERT INTO contract_addenda VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[id,siteId,contractId,...values,this.session.id,ts,ts]);
+      this.audit('CONTRACT_ADDENDUM_SAVE',siteId,{contractId,id,number:values[0]});
+      return {id,effectiveEndDate:this.contractEffectiveEnd(contractId,siteId,JSON.parse(original.data).endDate)};
+    });
+  }
+  contractAddendumDelete({siteId,contractId,id}){
+    this.check('contracts',siteId,'write');this.ensureManageRecord(this.contractMaster(siteId,contractId),'contracts');
+    const old=this.one('SELECT id FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=?',[id,siteId,contractId]);
+    if(!old)throw new Error('Không tìm thấy phụ lục.');
+    return this.transact(()=>{this.run('DELETE FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=?',[id,siteId,contractId]);this.audit('CONTRACT_ADDENDUM_DELETE',siteId,{contractId,id});return {success:true};});
+  }
   projectTasksList({siteId,projectId}){
     this.check('projects',siteId,'read');
     const project=this.one('SELECT id FROM records WHERE id=? AND site_id=? AND module=?',[projectId,siteId,'projects']);
@@ -306,7 +347,7 @@ class Store {
     const ts=byModule('tasks'),cs=byModule('checklists'),cts=byModule('contracts'),inv=byModule('inventory');
     const inDays=(s,n)=>{if(!s)return false;const d=new Date(s);return !isNaN(d)&&d>=new Date(new Date().toDateString())&&d<=new Date(Date.now()+n*86400000);};
     const recent=readable.length?this.all('SELECT id,module,data,updated_at FROM records WHERE site_id=? AND module IN ('+readable.map(()=>'?').join(',')+') ORDER BY updated_at DESC LIMIT 8',[siteId,...readable]).map(x=>({...x,data:JSON.parse(x.data)})):[];
-    return {counts,openTasks:ts.filter(x=>x.status!=='Done').length,checksDone:cs.filter(x=>x.status==='Done').length,checkTotal:cs.length,expiringContracts:cts.filter(x=>inDays(x.endDate,30)).length,warrantySoon:inv.filter(x=>inDays(x.warrantyUntil,30)).length,recent};
+    return {counts,openTasks:ts.filter(x=>x.status!=='Done').length,checksDone:cs.filter(x=>x.status==='Done').length,checkTotal:cs.length,expiringContracts:cts.filter(x=>{const master=this.one('SELECT id FROM records WHERE site_id=? AND module=? AND json_extract(data,\'$.contractNo\')=?',[siteId,'contracts',x.contractNo||'']);return inDays(master?this.contractEffectiveEnd(master.id,siteId,x.endDate):x.endDate,60)}).length,warrantySoon:inv.filter(x=>inDays(x.warrantyUntil,30)).length,recent};
   }
   auditList({siteId}){this.requireAdmin();return this.all('SELECT * FROM audit '+(siteId?'WHERE site_id=? OR site_id IS NULL ':'')+'ORDER BY created_at DESC LIMIT 500',siteId?[siteId]:[]);}
   settingsGet(){this.requireAuth();return this.all('SELECT * FROM settings').reduce((a,x)=>({...a,[x.key]:JSON.parse(x.value)}),{});}
