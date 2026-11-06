@@ -18,7 +18,7 @@ test('contract addenda retain original term and calculate effective latest expir
   assert.equal(s.recordsList({module:'contracts',siteId})[0].effectiveEndDate,'2028-03-31');
   assert.equal(s.contractAddendaList({siteId,contractId}).length,2);
   const other=s.siteSave({code:'OTHER',name:'Other Hotel',currency:'VND'}).id;
-  assert.throws(()=>s.contractAddendaList({siteId:other,contractId}),/không tìm thấy/);
+  assert.throws(()=>s.contractAddendaList({siteId:other,contractId}),/không tìm thấy/i);
   assert.throws(()=>s.contractAddendumSave({siteId,contractId,addendum:{addendum_no:'Bad',new_end_date:'2026-13-54'}}),/hợp lệ/);
   s.contractAddendumDelete({siteId,contractId,id:b.id});
   assert.equal(s.recordsList({module:'contracts',siteId})[0].effectiveEndDate,'2027-12-31');
