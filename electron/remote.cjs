@@ -53,7 +53,7 @@ class RemoteBridge {
   }
   async invoke(action,payload={}) {
     if(!this.enabled)throw Error('Chế độ máy chủ chưa được bật.');
-    if(action==='app.info')return {version:'0.6.0',mode:'server',url:this.url};
+    if(action==='app.info')return {version:'0.6.1',mode:'server',url:this.url};
     if(action==='auth.setup')throw Error('Máy chủ chỉ được khởi tạo bằng công cụ quản trị CLI.');
     if(action==='auth.status'){
       if(!this.token)return {authenticated:false,ready:true};

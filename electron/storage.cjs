@@ -30,6 +30,17 @@ function periodKey(date, frequency) {
   if(frequency==='Yearly')return date.slice(0,4);
   return date;
 }
+
+// Module-scoped function declaration avoids a temporal dead zone if dashboard
+// indicators are rearranged in a later release.
+function inDays(value,days){
+  if(!isoDay(value)||!Number.isInteger(days)||days<0)return false;
+  const current=new Date();
+  const start=Date.UTC(current.getFullYear(),current.getMonth(),current.getDate());
+  const end=Date.parse(value+'T00:00:00.000Z');
+  return end>=start&&end<=start+days*86400000;
+}
+
 const DEFAULT_SHIFTS=[{code:'D',factor:1},{code:'N',factor:1},{code:'HD',factor:.5},{code:'AL',factor:0},{code:'DO',factor:0}];
 const DEFAULT_CHECKLISTS=[{name:'Kiểm tra Backup',frequency:'Daily'},{name:'Kiểm tra NAS / Server',frequency:'Daily'}];
 const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) => ({salt, hash: crypto.scryptSync(password, salt, 64).toString('hex')});
@@ -77,7 +88,7 @@ class Store {
   transact(fn) { this.db.run('BEGIN'); try { const res=fn(); this.db.run('COMMIT'); this.persist(); return res; } catch(e) {this.db.run('ROLLBACK');throw e;} }
   audit(action,site,details) {this.run('INSERT INTO audit VALUES(?,?,?,?,?,?,?)',[uuid(),this.session?.id??null,this.session?.username??null,action,site||null,JSON.stringify(details??{}),now()]);}
   get userCount() {return this.one('SELECT COUNT(*) n FROM users').n;}
-  info(){ return {ready:this.userCount>0, version:'0.5.0', dataPath:this.folder, modules:MODULES}; }
+  info(){ return {ready:this.userCount>0, version:'0.6.1', dataPath:this.folder, modules:MODULES}; }
   setup({name,username,password,siteName}) {
     if(this.userCount) throw new Error('Hệ thống đã được khởi tạo.');
     if(!name?.trim()||!username?.trim()||!siteName?.trim()||!passwordOkay(password)) throw new Error('Điền đủ thông tin. Mật khẩu phải từ 10 ký tự, có chữ và số.');
@@ -348,7 +359,6 @@ class Store {
     for(const m of MODULES) counts[m]=readable.includes(m)?this.one('SELECT COUNT(*) n FROM records WHERE site_id=? AND module=?',[siteId,m]).n:null;
     const byModule=m=>readable.includes(m)?this.all('SELECT data FROM records WHERE site_id=? AND module=?',[siteId,m]).map(x=>JSON.parse(x.data)):[];
     const ts=byModule('tasks'),cs=byModule('checklists'),cts=readable.includes('contracts')?this.all('SELECT id,data FROM records WHERE site_id=? AND module=?',[siteId,'contracts']).map(r=>({id:r.id,...JSON.parse(r.data)})):[],inv=byModule('inventory');
-    const inDays=(s,n)=>{if(!s)return false;const d=new Date(s);return !isNaN(d)&&d>=new Date(new Date().toDateString())&&d<=new Date(Date.now()+n*86400000);};
     const roster=byModule('roster'),pl=byModule('pl'),capex=byModule('capex'),projects=byModule('projects');
     const currentYear=String(new Date().getFullYear()),currentMonth=new Date().toISOString().slice(0,7);
     const plYtd=pl.filter(x=>String(x.period||'').startsWith(currentYear+'-')).reduce((a,x)=>({budget:a.budget+Number(x.budget||0),actual:a.actual+Number(x.actual||0)}),{budget:0,actual:0});

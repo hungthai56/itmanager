@@ -76,7 +76,7 @@ export default function App(){
  const pageTitle=tr(moduleIds.includes(screen as ModuleId)?modules[screen as ModuleId].title:screenNames[screen]||screen);
  return <div className="app">
   <aside className={cn('sidebar',sidebarOpen&&'mobile-show')}>
-    <div className="brand"><div className="brand-icon"><Activity size={22}/></div><div><strong>LOTUS<span> IT</span></strong><small>COMMAND CENTER <b>v0.6</b></small></div></div>
+    <div className="brand"><div className="brand-icon"><Activity size={22}/></div><div><strong>LOTUS<span> IT</span></strong><small>COMMAND CENTER <b>v0.6.1</b></small></div></div>
     <div className="sidebar-site">{tr("WORKSPACE")}<span className="offline-pill"><CloudOff size={12}/>{tr(serverMode?'Máy chủ':'Offline')}</span></div>
     <div className="side-scroll">
       <div className="navgroup"><div className="navlabel">{tr("OVERVIEW")}</div>{menuItem('dashboard',tr('Dashboard'))}{canAdmin&&menuItem('cluster',tr('Cluster Overview'))}</div>
