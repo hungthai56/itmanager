@@ -1,0 +1,19 @@
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+RewriteEngine On
+RewriteRule ^api/v1/(dispatch|csrf|health)$ index.php [L,QSA]
+RewriteRule ^$ index.php [L]
+<IfModule mod_headers.c>
+ Header always set X-Content-Type-Options "nosniff"
+ Header always set Referrer-Policy "no-referrer"
+ Header always set X-Frame-Options "DENY"
+ Header always set Permissions-Policy "geolocation=(), camera=(), microphone=()"
+ Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+ Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+</IfModule>
+<FilesMatch "\.(php|phar|phtml)$">
+ <IfModule mod_authz_core.c>Require all denied</IfModule>
+</FilesMatch>
+<Files "index.php">
+ <IfModule mod_authz_core.c>Require all granted</IfModule>
+</Files>
