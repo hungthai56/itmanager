@@ -10,7 +10,7 @@ import {
   Save,Search,Settings2,ShieldCheck,SlidersHorizontal,Trash2,Upload,Users,Wallet,X,Keyboard,Check
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import {ChecklistBoard,RosterCalendar,ProjectRegistry,RecordHistory,ContractAddenda} from './OperationsBoards';
+import {ChecklistBoard,RosterCalendar,ProjectRegistry,RecordHistory,ContractAddenda,PLAnnual} from './OperationsBoards';
 import {FastTaskComposer,QuickEditableCell} from './QuickControls';
 import './quick.css';
 import type {Account,AuthStatus,Dashboard,ModuleId,RecordItem,Site,UserItem,Role} from './types';
@@ -252,6 +252,7 @@ function ModuleScreen({module,site,user,action,notify,openNewToken}:{module:Modu
   {module==='projects'&&<ProjectRegistry site={site} records={records} editable={allowWrite} mutate={quietMutate} refresh={refresh} notify={notify}/>}
    {module==='contracts'&&<ContractAddenda site={site} records={records} editable={allowWrite} mutate={quietMutate} refresh={refresh} notify={notify}/>}
   {module==='capex'&&<Forecast records={records} currency={site.currency}/>}
+   {module==='pl'&&<PLAnnual records={records} currency={site.currency}/>}
   <div className="panel data-panel">{module==='tasks'&&<div className="period-tabs">{([['today','Today'],['tomorrow','Tomorrow'],['records','Records']] as const).map(([v,label])=><button key={v} className={cn(period===v&&'active')} onClick={()=>setPeriod(v)}>{tr(label)}</button>)}</div>}<div className="list-toolbar">{module==='tasks'&&period==='records'&&<div className="filter-date-pair">
       <label className="field"><span>{tr('Từ ngày')}</span><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/></label>
       <label className="field"><span>{tr('Đến ngày')}</span><input type="date" min={fromDate||undefined} value={toDate} onChange={e=>setToDate(e.target.value)}/></label>

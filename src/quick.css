@@ -30,3 +30,6 @@
 .cluster-metric-row:hover{background:rgba(59,130,246,.05)}.cluster-metric-site{font-weight:700;font-size:12px}.cluster-metric-row strong{text-align:right;font-variant-numeric:tabular-nums}.cluster-metric-row small{grid-column:2 / 4;color:var(--muted,#667085);font-size:11px}
 .cluster-metric-bar{height:9px;background:rgba(100,116,139,.13);overflow:hidden;border-radius:99px}.cluster-metric-bar>span{display:block;background:#4078d0;height:100%;border-radius:99px;transition:width .2s}
 @media(max-width:700px){.cluster-metrics{grid-template-columns:1fr}}
+
+/* Annual P&L financial grid */
+.financial-grid{min-width:1500px;font-variant-numeric:tabular-nums}.financial-grid th,.financial-grid td{white-space:nowrap}.financial-grid thead th small{display:block;font-size:10px;opacity:.65;font-weight:400}.pl-cell{display:flex;flex-direction:column;gap:3px;min-width:74px;font-size:11px;text-align:right}.pl-cell span:first-child{color:var(--muted,#667085)}.pl-cell .over-budget,.financial-grid .over-budget{color:#ce3f49;font-weight:700}.pl-cell .under-budget,.financial-grid .under-budget{color:#238a6b}.pl-total{background:rgba(43,91,164,.08);font-weight:700}.financial-grid tbody th{text-align:left}

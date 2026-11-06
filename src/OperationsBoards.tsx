@@ -199,3 +199,46 @@ export function ContractAddenda({site,records,editable,mutate,refresh,notify}:{
    </div></div>}
  </section>;
 }
+
+type MonthTotal={budget:number;actual:number};
+type PLLine={key:string;type:string;account:string;months:MonthTotal[]};
+const money=(n:number)=>n.toLocaleString(readUILanguage()==='vi'?'vi-VN':'en-US',{maximumFractionDigits:2});
+export function PLAnnual({records,currency}:{records:RecordItem[];currency:string}){
+ const yearNow=new Date().getFullYear();
+ const [year,setYear]=useState(yearNow);
+ const months=['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
+ const lines=useMemo(()=>{
+  const map=new Map<string,PLLine>();
+  records.filter(r=>String(r.data.period||'').startsWith(String(year)+'-')).forEach(r=>{
+   const d=r.data,account=String(d.account||'Unassigned'),type=String(d.type||'Expense');
+   const m=Number(String(d.period||'').slice(5,7))-1;
+   if(m<0||m>11)return;
+   const key=type+'|'+account;
+   if(!map.has(key))map.set(key,{key,type,account,months:Array.from({length:12},()=>({budget:0,actual:0}))});
+   const entry=map.get(key)!;
+   entry.months[m].budget+=Number(d.budget||0);
+   entry.months[m].actual+=Number(d.actual||0);
+  });
+  return [...map.values()].sort((a,b)=>(a.type==='Revenue'?0:1)-(b.type==='Revenue'?0:1)||a.account.localeCompare(b.account));
+ },[records,year]);
+ const totals=(type:string)=>Array.from({length:12},(_,m)=>lines.filter(x=>x.type===type).reduce((acc,x)=>({budget:acc.budget+x.months[m].budget,actual:acc.actual+x.months[m].actual}),{budget:0,actual:0}));
+ const expense=totals('Expense'),revenue=totals('Revenue'),hasRevenue=lines.some(x=>x.type==='Revenue');
+ const lastMonth=year===yearNow?new Date().getMonth()+1:12;
+ const sum=(months:MonthTotal[])=>months.slice(0,lastMonth).reduce((a,x)=>({budget:a.budget+x.budget,actual:a.actual+x.actual}),{budget:0,actual:0});
+ const renderCell=(v:MonthTotal,type:string)=><div className="pl-cell"><span title={tr('Ngân sách')}>{money(v.budget)}</span><span className={(type==='Expense'?v.actual>v.budget:v.actual<v.budget)?'over-budget':'under-budget'} title={tr('Thực tế')}>{money(v.actual)}</span></div>;
+ return <section className="panel feature-board"><div className="feature-header"><div className="feature-icon"><CalendarRange size={19}/></div>
+ <div><h3>{tr('P&L · Ngân sách theo 12 tháng')}</h3><p>{tr('Mỗi ô: ngân sách ở trên, thực chi ở dưới. Đỏ là vượt ngân sách đối với chi phí.')}</p></div>
+ <label className="inline-date">{tr('Năm tài chính')} <input aria-label={tr('Năm tài chính')} type="number" min={2000} max={2200} value={year} onChange={e=>setYear(Number(e.target.value)||yearNow)}/></label></div>
+ {lines.length===0?<div className="feature-empty">{tr('Chưa có dữ liệu P&L cho năm này.')}</div>:<div className="table-scroll">
+ <table className="data-table financial-grid"><thead><tr><th>{tr('Mã tài khoản')}</th><th>{tr('Loại')}</th>
+ {months.map(x=><th key={x}>{x}<small>{tr('Budget / Actual')}</small></th>)}<th>{year===yearNow?'YTD':tr('Cả năm')}</th><th>{tr('Variance %')}</th></tr></thead>
+ <tbody>{lines.map(line=>{const total=sum(line.months);const variance=total.budget?100*(total.actual-total.budget)/total.budget:0;return <tr key={line.key}>
+ <th>{line.account}</th><td>{tr(line.type)}</td>{line.months.map((cell,i)=><td key={i}>{renderCell(cell,line.type)}</td>)}
+ <td>{renderCell(total,line.type)}</td><td className={variance>0&&line.type==='Expense'?'over-budget':'under-budget'}>{total.budget?variance.toFixed(1)+'%':'—'}</td>
+ </tr>})}
+ {hasRevenue&&<tr className="pl-total"><th colSpan={2}>{tr('Tổng doanh thu')}</th>{revenue.map((v,i)=><td key={i}>{renderCell(v,'Revenue')}</td>)}<td>{renderCell(sum(revenue),'Revenue')}</td><td>—</td></tr>}
+ <tr className="pl-total"><th colSpan={2}>{tr('Total Controllables')}</th>{expense.map((v,i)=><td key={i}>{renderCell(v,'Expense')}</td>)}<td>{renderCell(sum(expense),'Expense')}</td><td>—</td></tr>
+ </tbody></table></div>}
+ <div className="list-foot">{tr('Tiền tệ')}: {currency}. {tr('Bảng doanh thu chỉ hiển thị nếu có dữ liệu Revenue.')}</div>
+ </section>;
+}
