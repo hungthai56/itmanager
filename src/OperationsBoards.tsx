@@ -126,3 +126,76 @@ export function RecordHistory({site,module,record,onClose,notify}:{site:Site;mod
     return Array.from(new Set([...Object.keys(a),...Object.keys(b)])).filter(k=>!k.startsWith('_')&&JSON.stringify(a[k])!==JSON.stringify(b[k])).map(k=>({key:k,old:a[k],value:b[k]}));}
  return <div className="modal-shade" onMouseDown={onClose}><div className="modal history-modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><div><h3><History size={18}/>{tr("Lịch sử thay đổi")}</h3><small>{String(record.data.name||record.data.title||record.data.assetCode||'Bản ghi')}</small></div><button className="iconbtn" onClick={onClose}><X size={19}/></button></div><div className="modal-body">{loading?<p>{tr("Đang tải lịch sử...")}</p>:!entries.length?<p>{tr("Chưa có lịch sử cho bản ghi này. Các lần thay đổi sau khi nâng cấp sẽ được ghi nhận.")}</p>:<div className="history-timeline">{entries.map(h=><div key={h.id} className="history-entry"><div className="history-dot"><Clock3 size={13}/></div><div className="history-body"><strong>{tr(h.action)} · {h.username||tr('System')}</strong><small>{new Date(h.created_at).toLocaleString(readUILanguage()==='en'?'en-US':'vi-VN')}</small><button className="history-toggle" onClick={()=>setExpanded(expanded===h.id?null:h.id)}>{tr(expanded===h.id?'Thu gọn':'Xem các trường thay đổi')}</button>{expanded===h.id&&<div className="history-changes">{changes(h).length?changes(h).map(c=><div key={tr(c.key)}><strong>{tr(c.key)}</strong><span>{translateLocaleValue(c.old)} → {translateLocaleValue(c.value)}</span></div>):tr('Không có thay đổi nội dung.')}</div>}</div></div>)}</div>}</div><div className="modal-footer"><button className="btn light" onClick={onClose}>{tr("Đóng")}</button></div></div></div>;
 }
+
+type Addendum={
+ id:string;contract_id:string;site_id:string;addendum_no:string;signed_date:string;new_start_date:string;
+ new_end_date:string;amount:number;summary:string;created_at:string
+};
+const emptyAddendum={addendum_no:'',signed_date:'',new_start_date:'',new_end_date:'',amount:0,summary:''};
+export function ContractAddenda({site,records,editable,mutate,refresh,notify}:{
+ site:Site;records:RecordItem[];editable:boolean;mutate:Mutate;refresh:()=>Promise<void>;notify:Notify
+}){
+ const [chosen,setChosen]=useState(''),[addenda,setAddenda]=useState<Addendum[]>([]);
+ const [draft,setDraft]=useState<Partial<Addendum>|null>(null);
+ const contract=records.find(r=>r.id===chosen)||records[0];
+ const contractId=contract?.id;
+ const load=useCallback(async()=>{
+  if(!contractId){setAddenda([]);return}
+  try{setAddenda(await invoke<Addendum[]>('contract.addenda.list',{siteId:site.id,contractId}))}
+  catch(e){notify(safeMessage(e),true)}
+ },[site.id,contractId,notify]);
+ useEffect(()=>{void load()},[load]);
+ async function save(e:FormEvent){
+  e.preventDefault();if(!draft||!contractId)return;
+  await mutate(async()=>{
+   await invoke('contract.addenda.save',{siteId:site.id,contractId,addendum:draft});
+   setDraft(null);await load();await refresh();
+  },'Đã lưu phụ lục và cập nhật hạn hợp đồng.');
+ }
+ async function remove(id:string){
+  if(!contractId||!window.confirm(tr('Bạn có chắc muốn xóa phụ lục này?')))return;
+  await mutate(async()=>{await invoke('contract.addenda.delete',{siteId:site.id,contractId,id});await load();await refresh()},'Đã xóa phụ lục.');
+ }
+ return <section className="panel feature-board">
+   <div className="feature-header"><div className="feature-icon"><CalendarRange size={20}/></div>
+    <div><h3>{tr('Phụ lục & Gia hạn hợp đồng')}</h3><p>{tr('Lưu lịch sử gia hạn mà không thay đổi ngày hết hạn trong hợp đồng gốc.')}</p></div>
+   </div>
+   {!records.length?<div className="feature-empty">{tr('Hãy tạo hợp đồng trước khi thêm phụ lục.')}</div>:<>
+    <div className="feature-toolbar"><label className="field" style={{minWidth:260,flex:1}}>
+     <span>{tr('Hợp đồng gốc')}</span>
+     <select value={contractId||''} onChange={e=>{setChosen(e.target.value);setDraft(null)}}>
+      {records.map(r=><option key={r.id} value={r.id}>{String(r.data.contractNo||'')} · {String(r.data.name||'')}</option>)}
+     </select></label>
+     <div className="muted">{tr('Hết hạn gốc')}: <strong>{String(contract?.data.endDate||'—')}</strong>
+       {' · '}{tr('Hết hạn thực tế')}: <strong>{contract?.effectiveEndDate||contract?.data.endDate||'—'}</strong></div>
+     {editable&&<button type="button" className="btn primary" onClick={()=>setDraft({...emptyAddendum})}><Plus size={15}/>{tr('Thêm phụ lục')}</button>}
+    </div>
+    {!addenda.length?<div className="feature-empty">{tr('Chưa có phụ lục. Thời hạn thực tế đang theo hợp đồng gốc.')}</div>:
+     <div className="table-scroll"><table className="data-table"><thead><tr>
+      <th>{tr('Số phụ lục')}</th><th>{tr('Ngày ký')}</th><th>{tr('Ngày bắt đầu mới')}</th><th>{tr('Ngày kết thúc mới')}</th><th>{tr('Giá trị')}</th><th>{tr('Nội dung')}</th>{editable&&<th>{tr('Thao tác')}</th>}
+     </tr></thead><tbody>{addenda.map(r=><tr key={r.id}>
+      <td><strong>{r.addendum_no}</strong></td><td>{r.signed_date||'—'}</td><td>{r.new_start_date||'—'}</td>
+      <td>{r.new_end_date}</td><td>{Number(r.amount).toLocaleString(readUILanguage()==='vi'?'vi-VN':'en-US')}</td><td>{r.summary||'—'}</td>
+      {editable&&<td><button className="iconbtn" type="button" title={tr('Sửa')} onClick={()=>setDraft(r)}><Save size={15}/></button>
+      <button className="iconbtn danger" type="button" title={tr('Xóa')} onClick={()=>void remove(r.id)}><Trash2 size={15}/></button></td>}
+     </tr>)}</tbody></table></div>}
+   </>}
+   {draft&&<div className="modal-shade" onMouseDown={()=>setDraft(null)}><div className="modal" onMouseDown={e=>e.stopPropagation()}>
+    <div className="modal-head"><h3>{tr(draft.id?'Chỉnh sửa phụ lục':'Thêm phụ lục gia hạn')}</h3><button className="iconbtn" type="button" onClick={()=>setDraft(null)}><X/></button></div>
+    <form onSubmit={save}><div className="modal-body">
+      {([
+       ['addendum_no','Số phụ lục','text',true],
+       ['signed_date','Ngày ký','date',false],
+       ['new_start_date','Ngày bắt đầu mới','date',false],
+       ['new_end_date','Ngày kết thúc mới','date',true],
+       ['amount','Giá trị bổ sung / điều chỉnh','number',false]
+      ] as const).map(([key,label,type,required])=><label className="field" key={key}>
+       <span>{tr(label)}</span><input type={type} required={required} value={String(draft[key]??'')}
+        onChange={e=>setDraft(v=>({...v,[key]:type==='number'?Number(e.target.value):e.target.value}))}/></label>)}
+      <label className="field"><span>{tr('Nội dung tóm tắt')}</span>
+       <textarea rows={3} value={draft.summary||''} onChange={e=>setDraft(v=>({...v,summary:e.target.value}))}/></label>
+    </div><div className="modal-footer"><button type="button" className="btn light" onClick={()=>setDraft(null)}>{tr('Hủy')}</button>
+     <button className="btn primary" type="submit"><Save size={15}/>{tr('Lưu phụ lục')}</button></div></form>
+   </div></div>}
+ </section>;
+}
