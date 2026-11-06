@@ -348,9 +348,17 @@ class Store {
     for(const m of MODULES) counts[m]=readable.includes(m)?this.one('SELECT COUNT(*) n FROM records WHERE site_id=? AND module=?',[siteId,m]).n:null;
     const byModule=m=>readable.includes(m)?this.all('SELECT data FROM records WHERE site_id=? AND module=?',[siteId,m]).map(x=>JSON.parse(x.data)):[];
     const ts=byModule('tasks'),cs=byModule('checklists'),cts=readable.includes('contracts')?this.all('SELECT id,data FROM records WHERE site_id=? AND module=?',[siteId,'contracts']).map(r=>({id:r.id,...JSON.parse(r.data)})):[],inv=byModule('inventory');
+    const roster=byModule('roster'),pl=byModule('pl'),capex=byModule('capex'),projects=byModule('projects');
+    const currentYear=String(new Date().getFullYear()),currentMonth=new Date().toISOString().slice(0,7);
+    const plYtd=pl.filter(x=>String(x.period||'').startsWith(currentYear+'-')).reduce((a,x)=>({budget:a.budget+Number(x.budget||0),actual:a.actual+Number(x.actual||0)}),{budget:0,actual:0});
+    const capexYear=capex.filter(x=>String(x.year||currentYear)===currentYear&&!['Cancelled','Deferred'].includes(String(x.status||'')));
+    const capexYtd={budget:capexYear.reduce((s,x)=>s+Number(x.quantity||0)*Number(x.unitPrice||0),0),actual:capexYear.reduce((s,x)=>s+Number(x.actualSpent||0),0)};
+    const projectStatus={completed:projects.filter(x=>x.status==='Completed').length,inProgress:projects.filter(x=>x.status==='In Progress').length,delayed:projects.filter(x=>x.status==='Delayed').length};
+    const rosterStats={staff:new Set(roster.map(x=>String(x.employee||'').trim()).filter(Boolean)).size,shifts:roster.filter(x=>String(x.date||'').startsWith(currentMonth)).length};
+    const warrantyStats={expired:inv.filter(x=>x.warrantyUntil&&String(x.warrantyUntil)<new Date().toISOString().slice(0,10)).length,expiring90:inv.filter(x=>inDays(x.warrantyUntil,90)).length};
     const inDays=(s,n)=>{if(!s)return false;const d=new Date(s);return !isNaN(d)&&d>=new Date(new Date().toDateString())&&d<=new Date(Date.now()+n*86400000);};
     const recent=readable.length?this.all('SELECT id,module,data,updated_at FROM records WHERE site_id=? AND module IN ('+readable.map(()=>'?').join(',')+') ORDER BY updated_at DESC LIMIT 8',[siteId,...readable]).map(x=>({...x,data:JSON.parse(x.data)})):[];
-    return {counts,openTasks:ts.filter(x=>x.status!=='Done').length,checksDone:cs.filter(x=>x.status==='Done').length,checkTotal:cs.length,expiringContracts:cts.filter(x=>inDays(this.contractEffectiveEnd(x.id,siteId,x.endDate),60)).length,warrantySoon:inv.filter(x=>inDays(x.warrantyUntil,30)).length,recent};
+    return {counts,openTasks:ts.filter(x=>x.status!=='Done').length,checksDone:cs.filter(x=>x.status==='Done').length,checkTotal:cs.length,expiringContracts:cts.filter(x=>inDays(this.contractEffectiveEnd(x.id,siteId,x.endDate),60)).length,warrantySoon:inv.filter(x=>inDays(x.warrantyUntil,90)).length,plYtd,capexYtd,projectStatus,rosterStats,warrantyStats,recent};
   }
   auditList({siteId}){this.requireAdmin();return this.all('SELECT * FROM audit '+(siteId?'WHERE site_id=? OR site_id IS NULL ':'')+'ORDER BY created_at DESC LIMIT 500',siteId?[siteId]:[]);}
   settingsGet(){this.requireAuth();return this.all('SELECT * FROM settings').reduce((a,x)=>({...a,[x.key]:JSON.parse(x.value)}),{});}

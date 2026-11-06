@@ -23,3 +23,10 @@
 .project-quick-create{display:flex;align-items:center;gap:9px;background:#f8fafc;border:1px solid #e2e9f3;border-radius:8px;padding:7px 11px;margin:6px 0 12px;color:#6985b1}.project-quick-create input{flex:1;border:0;outline:0;background:none;font:inherit;font-size:12px;min-width:0;padding:4px}
 @media(max-width:850px){.top-search{min-width:34px;padding:0 8px}.top-search span,.top-search kbd{display:none}.quick-composer .quick-assignee{flex:1}.quick-composer .quick-due{width:134px}}
 .quick-date-input{font:inherit;font-size:12px;max-width:142px;color:#516179;background:#fff;border:1px solid #e1e6ee;border-radius:7px;padding:5px 6px;cursor:pointer}.quick-date-input:focus{outline:2px solid #c5d7fa}
+/* Cluster nine-module comparison charts */
+.cluster-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.cluster-metric{padding:18px}.cluster-metric .panel-header{margin-bottom:12px}
+.cluster-metric-row{display:grid;grid-template-columns:60px minmax(50px,1fr) 70px;gap:10px;align-items:center;width:100%;text-align:left;background:transparent;border:0;border-top:1px solid rgba(100,116,139,.12);padding:10px 0;cursor:pointer;color:inherit}
+.cluster-metric-row:hover{background:rgba(59,130,246,.05)}.cluster-metric-site{font-weight:700;font-size:12px}.cluster-metric-row strong{text-align:right;font-variant-numeric:tabular-nums}.cluster-metric-row small{grid-column:2 / 4;color:var(--muted,#667085);font-size:11px}
+.cluster-metric-bar{height:9px;background:rgba(100,116,139,.13);overflow:hidden;border-radius:99px}.cluster-metric-bar>span{display:block;background:#4078d0;height:100%;border-radius:99px;transition:width .2s}
+@media(max-width:700px){.cluster-metrics{grid-template-columns:1fr}}

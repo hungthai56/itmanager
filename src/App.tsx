@@ -147,7 +147,14 @@ function DashboardScreen({site,user,onNavigate,notify}:{site:Site;user:Account;o
  return <><PageHead eyebrow={`SITE OVERVIEW • ${site.code}`} title={`${tr('Xin chào')}, ${user.name.split(' ').slice(-1)[0]} 👋`} desc={`Tổng quan hoạt động công nghệ thông tin tại ${site.name}.`} actions={<span className="datepill"><CalendarDays size={15}/>{new Date().toLocaleDateString(languageForDate(),{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</span>}/>
   <div className="section-intro"><span>{tr("DAILY OPERATIONS")}</span><span>{tr("HOẠT ĐỘNG HÀNG NGÀY")}</span></div>
   <div className="kpi-grid"><Kpi name={tr("Công việc đang mở")} value={stats.openTasks} sub={tr("Cần xử lý hoặc đang thực hiện")} tone="orange" icon={<ClipboardList/>}/><Kpi name={tr("Checklist hoàn thành")} value={`${stats.checksDone}/${stats.checkTotal}`} sub={tr("Lượt kiểm tra đã hoàn thành")} tone="green" icon={<CheckCircle2/>}/><Kpi name={tr("Hợp đồng gần hết hạn")} value={stats.expiringContracts} sub={tr("Trong 30 ngày tới")} tone="red" icon={<Clock3/>}/><Kpi name={tr("Bảo hành sắp hết")} value={stats.warrantySoon} sub={tr("Trong 30 ngày tới")} tone="blue" icon={<HardDrive/>}/></div>
-  <div className="section-intro"><span>{tr("MANAGEMENT INSIGHTS")}</span><span>{tr("TỔNG HỢP DỮ LIỆU")}</span></div>
+  <div className="section-intro"><span>{tr("STRATEGIC & OPERATIONAL")}</span><span>{tr("TÀI CHÍNH VÀ TÀI SẢN")}</span></div>
+   <div className="kpi-grid compact">
+     <Kpi name={tr('P&L YTD Actual')} value={nfmt(stats.plYtd?.actual)} sub={tr('Budget')+': '+nfmt(stats.plYtd?.budget)} icon={<BarChart3/>}/>
+     <Kpi name={tr('CAPEX đã chi')} value={nfmt(stats.capexYtd?.actual)} sub={tr('Dự toán')+': '+nfmt(stats.capexYtd?.budget)} icon={<Wallet/>}/>
+     <Kpi name={tr('Dự án trễ hạn')} value={stats.projectStatus?.delayed||0} sub={tr('Dự án hoàn thành')+': '+(stats.projectStatus?.completed||0)} tone="orange" icon={<FolderKanban/>}/>
+     <Kpi name={tr('Thiết bị hết bảo hành')} value={stats.warrantyStats?.expired||0} sub={tr('Sắp hết hạn ≤90 ngày')+': '+(stats.warrantyStats?.expiring90||0)} tone="red" icon={<HardDrive/>}/>
+   </div>
+   <div className="section-intro"><span>{tr("MANAGEMENT INSIGHTS")}</span><span>{tr("TỔNG HỢP DỮ LIỆU")}</span></div>
   <div className="dash-row"><div className="panel stat-panel"><div className="panel-header"><div><h3>{tr("Tổng quan theo phân hệ")}</h3><p>{tr("Thống kê bản ghi đang quản lý")}</p></div><div className="mini-counter">{total} bản ghi</div></div>
     <div className="barlist">{moduleIds.filter(m=>stats.counts[m]!==null).map(m=><button className="barlist-row" key={m} onClick={()=>onNavigate(m)}><span>{tr(modules[m].title)}</span><div className="bartrack"><div className="barfill" style={{width:`${Math.max(2,100*(stats.counts[m]||0)/Math.max(1,...Object.values(stats.counts).map(x=>x||0)))}%`}}/></div><strong>{stats.counts[m]}</strong></button>)}</div>
   </div><div className="panel actions-panel"><div className="panel-header"><div><h3>{tr("Truy cập nhanh")}</h3><p>{tr("Đến các công cụ được dùng nhiều")}</p></div></div><div className="quick-grid">{(['tasks','checklists','inventory','contracts','projects','knowledge'] as ModuleId[]).map(m=><button key={m} onClick={()=>onNavigate(m)} className="quick-tile"><span className="quick-icon"><Icon name={m} size={20}/></span><span>{tr(modules[m].title)}</span><ArrowRight size={15}/></button>)}</div><div className="tip"><ShieldCheck size={18}/><span>{tr("Dữ liệu hiện được lưu offline trên máy. Hãy sao lưu định kỳ để tránh mất dữ liệu.")}</span></div></div></div>
@@ -157,7 +164,28 @@ function DashboardScreen({site,user,onNavigate,notify}:{site:Site;user:Account;o
 function ClusterScreen({sites,onGoto}:{sites:Site[];onGoto:(id:string)=>void}){
  const [data,setData]=useState<{site:Site;stats:Dashboard}[]>([]);
  useEffect(()=>{Promise.all(sites.map(async site=>({site,stats:await api<Dashboard>('dashboard.get',{siteId:site.id})}))).then(setData).catch(()=>setData([]))},[sites]);
- return <><PageHead title={tr("Cluster Overview")} desc={tr("Một góc nhìn tổng hợp cho toàn bộ cơ sở thuộc hệ thống khách sạn.")}/><div className="cluster-grid">{data.map(({site,stats})=><div key={site.id} className="panel cluster-card"><div className="cluster-top"><div className="cluster-brand"><Building2/><div><strong>{site.name}</strong><span>{site.code} · {site.currency}</span></div></div><button className="iconbtn" onClick={()=>onGoto(site.id)} title={tr("Xem Dashboard")}><ArrowRight/></button></div><div className="cluster-stats"><div><span>{tr("Daily Tasks")}</span><strong>{stats.counts.tasks??'—'}</strong></div><div><span>{tr("Check Lists")}</span><strong>{stats.counts.checklists??'—'}</strong></div><div><span>{tr("Inventory")}</span><strong>{stats.counts.inventory??'—'}</strong></div><div><span>{tr("Contracts")}</span><strong>{stats.counts.contracts??'—'}</strong></div></div><div className="cluster-alert">{stats.openTasks} công việc đang mở · {stats.expiringContracts} hợp đồng gần hết hạn</div></div>)}</div></>;
+ const metrics:{name:string;value:(d:Dashboard)=>number;desc:(d:Dashboard)=>string}[]=[
+  {name:'Daily Tasks',value:d=>d.openTasks,desc:d=>d.openTasks+' '+tr('việc chưa hoàn thành')},
+  {name:'Checklist',value:d=>d.checkTotal?Math.round(d.checksDone/d.checkTotal*100):0,desc:d=>d.checksDone+'/'+d.checkTotal+' ('+(d.checkTotal?Math.round(d.checksDone/d.checkTotal*100):0)+'%)'},
+  {name:'Roster',value:d=>d.rosterStats?.shifts||0,desc:d=>(d.rosterStats?.staff||0)+' '+tr('nhân viên')+' · '+(d.rosterStats?.shifts||0)+' '+tr('ca trong tháng')},
+  {name:'Contracts',value:d=>d.expiringContracts,desc:d=>d.expiringContracts+' '+tr('hợp đồng sắp hết hạn')},
+  {name:'P&L YTD',value:d=>d.plYtd?.actual||0,desc:d=>tr('Thực tế')+': '+nfmt(d.plYtd?.actual)+' / '+tr('Ngân sách')+': '+nfmt(d.plYtd?.budget)},
+  {name:'CAPEX',value:d=>d.capexYtd?.actual||0,desc:d=>tr('Thực chi')+': '+nfmt(d.capexYtd?.actual)+' / '+tr('Dự toán')+': '+nfmt(d.capexYtd?.budget)},
+  {name:'Projects',value:d=>d.counts.projects||0,desc:d=>(d.projectStatus?.completed||0)+' '+tr('hoàn tất')+' · '+(d.projectStatus?.delayed||0)+' '+tr('trễ hạn')},
+  {name:'Inventory',value:d=>d.counts.inventory||0,desc:d=>(d.warrantyStats?.expired||0)+' '+tr('thiết bị hết bảo hành')+' · '+(d.warrantyStats?.expiring90||0)+' '+tr('sắp hết bảo hành')},
+  {name:'Knowledge Base',value:d=>d.counts.knowledge||0,desc:d=>(d.counts.knowledge||0)+' '+tr('tài liệu')}
+ ];
+ return <><PageHead title={tr('Cluster Overview')} desc={tr('So sánh 9 nhóm chỉ số vận hành theo từng khách sạn được quản lý.')}/>
+ <div className="cluster-metrics">{metrics.map(metric=>{
+  const max=Math.max(1,...data.map(x=>metric.value(x.stats)));
+  return <div className="panel cluster-metric" key={metric.name}><div className="panel-header"><div><h3>{tr(metric.name)}</h3></div></div>
+   {data.map(({site,stats})=><button className="cluster-metric-row" type="button" key={site.id} title={metric.desc(stats)} onClick={()=>onGoto(site.id)}>
+    <span className="cluster-metric-site">{site.code}</span>
+    <span className="cluster-metric-bar"><span style={{width:(metric.value(stats)>0?Math.max(4,100*metric.value(stats)/max):0)+'%'}}/></span>
+    <strong>{nfmt(metric.value(stats))}</strong><small>{metric.desc(stats)}</small>
+   </button>)}
+  </div>
+ })}</div></>;
 }
 function ModuleScreen({module,site,user,action,notify,openNewToken}:{module:ModuleId;site:Site;user:Account;openNewToken:number;action:(fn:()=>Promise<unknown>,msg?:string)=>Promise<void>;notify:(s:string,e?:boolean)=>void}){
  const spec=modules[module];const [records,setRecords]=useState<RecordItem[]>([]),[loading,setLoading]=useState(true),[term,setTerm]=useState(''),[filter,setFilter]=useState('all'),[fromDate,setFromDate]=useState(''),[toDate,setToDate]=useState(''),[inventoryFilter,setInventoryFilter]=useState('all'),[period,setPeriod]=useState<'today'|'tomorrow'|'records'>('today'),[selected,setSelected]=useState<string[]>([]),[editing,setEditing]=useState<RecordItem|null|undefined>(undefined),[qrView,setQrView]=useState<{name:string;code:string;src:string}|null>(null),[config,setConfig]=useState<Record<string,any>>({}),[bulkOpen,setBulkOpen]=useState(false),[historyRecord,setHistoryRecord]=useState<RecordItem|null>(null),[bulkStatus,setBulkStatus]=useState(module==='inventory'?'Active':'Done'),[pendingIds,setPendingIds]=useState<string[]>([]);
