@@ -165,7 +165,11 @@ function Badge({text}:{text:unknown}){return <span className={cn('status',status
 
 function DashboardScreen({site,user,onNavigate,notify}:{site:Site;user:Account;onNavigate:(s:Screen)=>void;notify:(s:string,e?:boolean)=>void}){
  const [stats,setStats]=useState<Dashboard|null>(null);
- useEffect(()=>{api<Dashboard>('dashboard.get',{siteId:site.id}).then(setStats).catch(e=>notify(err(e),true))},[site.id,notify]);
+ useEffect(()=>{
+    let active=true;
+    const get=()=>{void api<Dashboard>('dashboard.get',{siteId:site.id}).then(d=>{if(active)setStats(d)}).catch(e=>notify(err(e),true))};
+    get();const id=window.setInterval(get,40000);return ()=>{active=false;window.clearInterval(id)};
+  },[site.id,notify]);
  if(!stats)return <div className="loading-content"><div className="spinner"/>{tr("Đang tải Dashboard...")}</div>;
  const total=Object.values(stats.counts).reduce<number>((v,n)=>v+(n||0),0);
  return <><PageHead eyebrow={`SITE OVERVIEW • ${site.code}`} title={`${tr('Xin chào')}, ${user.name.split(' ').slice(-1)[0]} 👋`} desc={`Tổng quan hoạt động công nghệ thông tin tại ${site.name}.`} actions={<span className="datepill"><CalendarDays size={15}/>{new Date().toLocaleDateString(languageForDate(),{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</span>}/>
@@ -187,7 +191,10 @@ function DashboardScreen({site,user,onNavigate,notify}:{site:Site;user:Account;o
 }
 function ClusterScreen({sites,onGoto}:{sites:Site[];onGoto:(id:string)=>void}){
  const [data,setData]=useState<{site:Site;stats:Dashboard}[]>([]);
- useEffect(()=>{Promise.all(sites.map(async site=>({site,stats:await api<Dashboard>('dashboard.get',{siteId:site.id})}))).then(setData).catch(()=>setData([]))},[sites]);
+ useEffect(()=>{let active=true;const get=()=>{
+    void Promise.all(sites.map(async site=>({site,stats:await api<Dashboard>('dashboard.get',{siteId:site.id})})))
+      .then(d=>{if(active)setData(d)}).catch(()=>{if(active)setData([])});
+  };get();const id=window.setInterval(get,60000);return ()=>{active=false;window.clearInterval(id)}},[sites]);
  const metrics:{name:string;value:(d:Dashboard)=>number;desc:(d:Dashboard)=>string}[]=[
   {name:'Daily Tasks',value:d=>d.openTasks,desc:d=>d.openTasks+' '+tr('việc chưa hoàn thành')},
   {name:'Checklist',value:d=>d.checkTotal?Math.round(d.checksDone/d.checkTotal*100):0,desc:d=>d.checksDone+'/'+d.checkTotal+' ('+(d.checkTotal?Math.round(d.checksDone/d.checkTotal*100):0)+'%)'},
@@ -221,6 +228,8 @@ function ModuleScreen({module,site,user,action,notify,openNewToken}:{module:Modu
  const loadedOnce=useRef(false);
  const refresh=useCallback(async()=>{if(!loadedOnce.current)setLoading(true);try{setRecords(await api<RecordItem[]>('records.list',{module,siteId:site.id}));loadedOnce.current=true}catch(e){notify(err(e),true)}finally{setLoading(false)}},[module,site.id,notify]);
  useEffect(()=>{void refresh()},[refresh]);
+  useEffect(()=>{const id=window.setInterval(()=>{if(pendingIds.length===0&&editing===undefined)void refresh()},25000);
+    return ()=>window.clearInterval(id)},[refresh,pendingIds.length,editing]);
  useEffect(()=>{void api<Record<string,any>>('settings.get',{siteId:site.id}).then(setConfig).catch(()=>{})},[]);
  const filtered=useMemo(()=>records.filter(r=>{const matches=JSON.stringify(r.data).toLowerCase().includes(term.toLowerCase());const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);const next=`${tomorrow.getFullYear()}-${String(tomorrow.getMonth()+1).padStart(2,'0')}-${String(tomorrow.getDate()).padStart(2,'0')}`;const due=String(r.data.dueDate||'');const periodPass=module!=='tasks'||period==='records'||(period==='today'&&(!due||due<=today()&&r.data.status!=='Done'||due===today()))||(period==='tomorrow'&&due===next);const remaining=String(r.data.warrantyUntil||'')?Math.ceil((Date.parse(String(r.data.warrantyUntil)+'T00:00:00Z')-Date.parse(today()+'T00:00:00Z'))/86400000):Infinity;
     const datePass=module!=='tasks'||period!=='records'||((!fromDate||due>=fromDate)&&(!toDate||due<=toDate));
