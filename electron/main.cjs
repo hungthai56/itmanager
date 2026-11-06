@@ -24,6 +24,7 @@ async function dispatch(action,p){
     case 'auth.logout':return store.logout();
     case 'auth.changePassword':return store.changePassword(p);
     case 'sites.list':return store.sites();
+     case 'sites.switch':return store.siteSwitch(p);
     case 'sites.save':return store.siteSave(p);
     case 'users.list':return store.users();
     case 'users.save':return store.userSave(p);
@@ -80,7 +81,10 @@ async function dispatch(action,p){
     }
     case 'reports.export':{
       store.check(p.module,p.siteId,'read');
-      const rows=store.recordsList({module:p.module,siteId:p.siteId});
+      const ids=p.ids;
+       if(ids!==undefined&&(!Array.isArray(ids)||ids.length>10000||ids.some(x=>typeof x!=='string')))throw new Error('Danh sách bản ghi xuất không hợp lệ.');
+       const selected=Array.isArray(ids)?new Set(ids):null;
+       const rows=store.recordsList({module:p.module,siteId:p.siteId}).filter(r=>!selected||selected.has(r.id));
       const cols=Array.isArray(p.columns)?p.columns.filter(x=>typeof x==='string'&&/^[a-zA-Z][\w]{0,39}$/.test(x)).slice(0,20):[];
       if(!cols.length)throw new Error('Không có cột báo cáo.');
       const labels=typeof p.labels==='object'&&p.labels?p.labels:{};
@@ -92,7 +96,7 @@ async function dispatch(action,p){
       for(let i=2;i<=sheet.rowCount;i++){const row=sheet.getRow(i);row.height=22;if(i%2===0)row.eachCell(cell=>{cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF3F6FA'}};});}
       sheet.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,sheet.rowCount),column:cols.length}};
       const result=await dialog.showSaveDialog(win,{defaultPath:`Lotus-${p.module}-${new Date().toISOString().slice(0,10)}.xlsx`,filters:[{name:'Excel workbook',extensions:['xlsx']}]});if(result.canceled||!result.filePath)return{cancelled:true};
-      await book.xlsx.writeFile(result.filePath);return{saved:true,path:result.filePath,count:rows.length};
+      await book.xlsx.writeFile(result.filePath);store.transact(()=>store.audit('REPORT_EXPORT',p.siteId,{module:p.module,count:rows.length}));return{saved:true,path:result.filePath,count:rows.length};
     }
     case 'file.save':{
       store.requireAuth();

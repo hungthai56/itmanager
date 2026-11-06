@@ -107,7 +107,8 @@ class Store {
     this.transact(()=>this.audit('LOGIN',this.session.siteId,{}));
     return this.status();
   }
-  status() {return this.session?{authenticated:true,user:this.session,sites:this.sites()}: {authenticated:false,ready:this.userCount>0};}
+  status() {return this.session?{authenticated:true,user:this.session,sites:this.sites()}: {authenticated:false,ready:this.userCount>0,sites:this.all('SELECT id,code,name,currency,created_at FROM sites ORDER BY name')};}
+  siteSwitch({siteId}){this.siteAllowed(siteId);this.session.siteId=siteId;return {siteId};}
   logout() {if(this.session)this.transact(()=>this.audit('LOGOUT',this.session.siteId,{}));this.session=null;return {authenticated:false};}
   requireAuth() {if(!this.session)throw new Error('Vui lòng đăng nhập lại.');}
   requireAdmin() {this.requireAuth();if(this.session.role!=='SYS')throw new Error('Chỉ quản trị hệ thống được thực hiện.');}
