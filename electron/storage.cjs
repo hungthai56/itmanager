@@ -344,10 +344,10 @@ class Store {
     const readable=MODULES.filter(m=>{try{this.check(m,siteId,'read');return true;}catch{return false;}});
     for(const m of MODULES) counts[m]=readable.includes(m)?this.one('SELECT COUNT(*) n FROM records WHERE site_id=? AND module=?',[siteId,m]).n:null;
     const byModule=m=>readable.includes(m)?this.all('SELECT data FROM records WHERE site_id=? AND module=?',[siteId,m]).map(x=>JSON.parse(x.data)):[];
-    const ts=byModule('tasks'),cs=byModule('checklists'),cts=byModule('contracts'),inv=byModule('inventory');
+    const ts=byModule('tasks'),cs=byModule('checklists'),cts=readable.includes('contracts')?this.all('SELECT id,data FROM records WHERE site_id=? AND module=?',[siteId,'contracts']).map(r=>({id:r.id,...JSON.parse(r.data)})):[],inv=byModule('inventory');
     const inDays=(s,n)=>{if(!s)return false;const d=new Date(s);return !isNaN(d)&&d>=new Date(new Date().toDateString())&&d<=new Date(Date.now()+n*86400000);};
     const recent=readable.length?this.all('SELECT id,module,data,updated_at FROM records WHERE site_id=? AND module IN ('+readable.map(()=>'?').join(',')+') ORDER BY updated_at DESC LIMIT 8',[siteId,...readable]).map(x=>({...x,data:JSON.parse(x.data)})):[];
-    return {counts,openTasks:ts.filter(x=>x.status!=='Done').length,checksDone:cs.filter(x=>x.status==='Done').length,checkTotal:cs.length,expiringContracts:cts.filter(x=>{const master=this.one('SELECT id FROM records WHERE site_id=? AND module=? AND json_extract(data,\'$.contractNo\')=?',[siteId,'contracts',x.contractNo||'']);return inDays(master?this.contractEffectiveEnd(master.id,siteId,x.endDate):x.endDate,60)}).length,warrantySoon:inv.filter(x=>inDays(x.warrantyUntil,30)).length,recent};
+    return {counts,openTasks:ts.filter(x=>x.status!=='Done').length,checksDone:cs.filter(x=>x.status==='Done').length,checkTotal:cs.length,expiringContracts:cts.filter(x=>inDays(this.contractEffectiveEnd(x.id,siteId,x.endDate),60)).length,warrantySoon:inv.filter(x=>inDays(x.warrantyUntil,30)).length,recent};
   }
   auditList({siteId}){this.requireAdmin();return this.all('SELECT * FROM audit '+(siteId?'WHERE site_id=? OR site_id IS NULL ':'')+'ORDER BY created_at DESC LIMIT 500',siteId?[siteId]:[]);}
   settingsGet(){this.requireAuth();return this.all('SELECT * FROM settings').reduce((a,x)=>({...a,[x.key]:JSON.parse(x.value)}),{});}
