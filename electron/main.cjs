@@ -2,9 +2,11 @@ const {app,BrowserWindow,ipcMain,dialog,shell} = require('electron');
 const path=require('node:path');
 const fs=require('node:fs');
 const {Store}=require('./storage.cjs');
+const {RemoteBridge}=require('./remote.cjs');
 const ExcelJS=require('exceljs');
 const QRCode=require('qrcode');
 let store;
+let remote;
 let win;
 const isDev=!!process.env.VITE_DEV_SERVER_URL;
 const safeName=name=>String(name||'attachment').replace(/[^a-zA-Z0-9._-]/g,'_').slice(0,100);
@@ -16,6 +18,12 @@ function startWindow(){
 }
 async function dispatch(action,p){
   p=p&&typeof p==='object'?p:{};
+  if(action==='connection.status')return remote.status();
+  if(action==='connection.configure'){
+    if(store.session)store.logout();
+    return remote.configure(p);
+  }
+  if(remote.enabled)return remote.invoke(action,p);
   switch(action){
     case 'app.info':return store.info();
     case 'auth.status':return store.status();
@@ -117,5 +125,5 @@ async function dispatch(action,p){
     default:throw new Error('Unknown action');
   }
 }
-app.whenReady().then(async()=>{store=new Store(path.join(app.getPath('userData'),'storage'));await store.init();ipcMain.handle('lotus:invoke',(_e,action,payload)=>dispatch(action,payload));startWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)startWindow();});}).catch(e=>{dialog.showErrorBox('Không thể khởi động Lotus IT',String(e?.stack||e));app.quit();});
+app.whenReady().then(async()=>{store=new Store(path.join(app.getPath('userData'),'storage'));await store.init();remote=new RemoteBridge(app.getPath('userData'));ipcMain.handle('lotus:invoke',(_e,action,payload)=>dispatch(action,payload));startWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)startWindow();});}).catch(e=>{dialog.showErrorBox('Không thể khởi động Lotus IT',String(e?.stack||e));app.quit();});
 app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit();});

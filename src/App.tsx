@@ -43,6 +43,7 @@ export default function App(){
  const [auth,setAuth]=useState<AuthStatus|null>(null),[screen,setScreen]=useState<Screen>('dashboard'),[siteId,setSiteId]=useState('');
  const [busy,setBusy]=useState(false),[toast,setToast]=useState<{text:string;error?:boolean}|null>(null),[sidebarOpen,setSidebarOpen]=useState(false);
  const [reload,setReload]=useState(0);
+  const [serverMode,setServerMode]=useState(false);
  const [launcherOpen,setLauncherOpen]=useState(false),[launcherTerm,setLauncherTerm]=useState(''),[createToken,setCreateToken]=useState(0);
  useEffect(()=>{
   const shortcut=(event:KeyboardEvent)=>{
@@ -62,7 +63,7 @@ export default function App(){
  },[auth,screen]);
 
  const loadAuth=useCallback(async()=>{try{const state=await api<AuthStatus>('auth.status');setAuth(state);if(state.authenticated){setSiteId(current=>state.sites?.some(s=>s.id===current)?current:state.user?.siteId||state.sites?.[0]?.id||'');}}catch(e){setToast({text:err(e),error:true})}},[]);
- useEffect(()=>{void loadAuth()},[loadAuth]);
+ useEffect(()=>{void loadAuth();void api<{enabled:boolean}>('connection.status').then(c=>setServerMode(c.enabled)).catch(()=>{})},[loadAuth]);
  const flash=useCallback((text:string,error=false)=>{setToast({text,error});window.setTimeout(()=>setToast(null),4200)},[]);
  const action=useCallback(async(fn:()=>Promise<unknown>,message?:string)=>{try{setBusy(true);await fn();if(message)flash(message);setReload(v=>v+1)}catch(e){flash(err(e),true)}finally{setBusy(false)}},[flash]);
  async function logout(){await action(async()=>{await api('auth.logout');setAuth({authenticated:false,ready:true});setScreen('dashboard')})}
@@ -75,8 +76,8 @@ export default function App(){
  const pageTitle=tr(moduleIds.includes(screen as ModuleId)?modules[screen as ModuleId].title:screenNames[screen]||screen);
  return <div className="app">
   <aside className={cn('sidebar',sidebarOpen&&'mobile-show')}>
-    <div className="brand"><div className="brand-icon"><Activity size={22}/></div><div><strong>LOTUS<span> IT</span></strong><small>COMMAND CENTER <b>v0.5</b></small></div></div>
-    <div className="sidebar-site">{tr("WORKSPACE")}<span className="offline-pill"><CloudOff size={12}/>{tr("Offline")}</span></div>
+    <div className="brand"><div className="brand-icon"><Activity size={22}/></div><div><strong>LOTUS<span> IT</span></strong><small>COMMAND CENTER <b>v0.6</b></small></div></div>
+    <div className="sidebar-site">{tr("WORKSPACE")}<span className="offline-pill"><CloudOff size={12}/>{tr(serverMode?'Máy chủ':'Offline')}</span></div>
     <div className="side-scroll">
       <div className="navgroup"><div className="navlabel">{tr("OVERVIEW")}</div>{menuItem('dashboard',tr('Dashboard'))}{canAdmin&&menuItem('cluster',tr('Cluster Overview'))}</div>
       {schemaGroups.map(([title,ids])=><div className="navgroup" key={title}><div className="navlabel">{tr(title)}</div>{ids.map(id=>menuItem(id,tr(modules[id].title)))}</div>)}
@@ -120,10 +121,33 @@ function err(e:unknown){return tr(e instanceof Error?e.message:String(e))}
 
 function AuthScreen({ready,sites,onSuccess,notify,language,onLanguageChange}:{ready:boolean;sites:Site[];onSuccess:()=>Promise<void>;notify:(x:string,error?:boolean)=>void;language:Language;onLanguageChange:(language:Language)=>void}){
  const [form,setForm]=useState({name:'',siteName:'Golden Lotus Grand Hotel',username:'',password:''}),[busy,setBusy]=useState(false);
+  const [connection,setConnection]=useState<{enabled:boolean;url:string;web?:boolean}|null>(null);
+  const [serverUrl,setServerUrl]=useState(''),[useServer,setUseServer]=useState(false),[connecting,setConnecting]=useState(false);
+  useEffect(()=>{void api<{enabled:boolean;url:string;web?:boolean}>('connection.status').then(c=>{setConnection(c);setServerUrl(c.url||'');setUseServer(c.enabled)}).catch(()=>{})},[]);
+  async function applyConnection(){
+    if(connection?.web)return;
+    setConnecting(true);
+    try{
+      const next=await api<{enabled:boolean;url:string}>('connection.configure',{enabled:useServer,url:serverUrl});
+      setConnection(next);notify(tr(useServer?'Đã kết nối máy chủ HTTPS. Hãy đăng nhập.':'Đã chuyển về chế độ dữ liệu offline.'));
+      await onSuccess();
+    }catch(e){notify(err(e),true)}finally{setConnecting(false)}
+  }
  const field=(key:keyof typeof form,label:string,type='text')=><label className="field"><span>{tr(label)}</span><input autoComplete={key==='password'?'current-password':'off'} type={type} value={form[key]} required onChange={e=>setForm(v=>({...v,[key]:e.target.value}))}/></label>;
  async function submit(e:FormEvent){e.preventDefault();setBusy(true);try{await api(ready?'auth.login':'auth.setup',form);if(!ready){notify(tr('Đã khởi tạo. Đăng nhập bằng tài khoản vừa tạo.'));}else await onSuccess();if(!ready)await onSuccess()}catch(e){notify(err(e),true)}finally{setBusy(false)}}
  return <div className="auth-bg"><div className="auth-decoration auth-decoration-a"/><div className="auth-decoration auth-decoration-b"/><div className="auth-card"><div className="auth-language"><LanguageSelect value={language} onChange={onLanguageChange}/></div><div className="auth-mark"><Activity size={27}/></div><div className="auth-sub">LOTUS IT COMMAND</div><h1>{tr(ready?'Chào mừng trở lại':'Thiết lập hệ thống')}</h1><p>{tr(ready?'Đăng nhập để truy cập trung tâm vận hành IT của khách sạn.':'Tạo tài khoản quản trị đầu tiên. Toàn bộ dữ liệu lưu trên máy này.')}</p>
-  <form onSubmit={submit}>{!ready&&<>{field('siteName','Tên khách sạn')}{field('name','Họ và tên quản trị')}</>}{field('username','Tên đăng nhập')}{field('password',ready?'Mật khẩu':'Mật khẩu (từ 10 ký tự, gồm chữ và số)','password')}<button className="btn primary wide auth-submit" disabled={busy}>{tr(busy?'Đang xử lý...':ready?'Đăng nhập':'Khởi tạo hệ thống')} <ArrowRight size={16}/></button></form>
+  {connection&&<div className="connection-config">
+    {connection.web?<div className="connection-web-label"><ShieldCheck size={16}/>{tr('Phiên bản web · Dữ liệu trên máy chủ HTTPS')}</div>:
+    <><div className="connection-switch">
+      <label><input type="radio" checked={!useServer} onChange={()=>setUseServer(false)}/>{tr('Làm việc offline')}</label>
+      <label><input type="radio" checked={useServer} onChange={()=>setUseServer(true)}/>{tr('Máy chủ PHP/MySQL')}</label>
+     </div>
+     {useServer&&<input aria-label={tr('Địa chỉ máy chủ HTTPS')} type="url" placeholder="https://it.example.com" value={serverUrl} onChange={e=>setServerUrl(e.target.value)}/>}
+     {(useServer!==connection.enabled||(useServer&&serverUrl!==connection.url))&&<button type="button" className="btn light wide" disabled={connecting} onClick={()=>void applyConnection()}>{tr(connecting?'Đang kiểm tra chứng chỉ...':'Áp dụng kết nối')}</button>}
+     <small>{tr(connection.enabled?'Đang dùng dữ liệu máy chủ. SQLite offline vẫn giữ nguyên.':'Đang dùng dữ liệu SQLite riêng trên máy này.')}</small>
+    </>}
+   </div>}
+   <form onSubmit={submit}>{!ready&&<>{field('siteName','Tên khách sạn')}{field('name','Họ và tên quản trị')}</>}{field('username','Tên đăng nhập')}{field('password',ready?'Mật khẩu':'Mật khẩu (từ 10 ký tự, gồm chữ và số)','password')}<button className="btn primary wide auth-submit" disabled={busy}>{tr(busy?'Đang xử lý...':ready?'Đăng nhập':'Khởi tạo hệ thống')} <ArrowRight size={16}/></button></form>
   {ready&&sites.length>0&&<div className="auth-sites"><strong>{tr('Các khách sạn đang hoạt động')}</strong><div className="compact-tabs">{sites.map(site=><span key={site.id} className="datepill">{site.code} · {site.name}</span>)}</div></div>}
    <div className="auth-foot"><ShieldCheck size={15}/>{tr("Mã hóa mật khẩu · Cơ sở dữ liệu cục bộ · Không cần Internet")}</div>
  </div></div>
@@ -197,7 +221,7 @@ function ModuleScreen({module,site,user,action,notify,openNewToken}:{module:Modu
  const loadedOnce=useRef(false);
  const refresh=useCallback(async()=>{if(!loadedOnce.current)setLoading(true);try{setRecords(await api<RecordItem[]>('records.list',{module,siteId:site.id}));loadedOnce.current=true}catch(e){notify(err(e),true)}finally{setLoading(false)}},[module,site.id,notify]);
  useEffect(()=>{void refresh()},[refresh]);
- useEffect(()=>{void api<Record<string,any>>('settings.get').then(setConfig).catch(()=>{})},[]);
+ useEffect(()=>{void api<Record<string,any>>('settings.get',{siteId:site.id}).then(setConfig).catch(()=>{})},[]);
  const filtered=useMemo(()=>records.filter(r=>{const matches=JSON.stringify(r.data).toLowerCase().includes(term.toLowerCase());const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);const next=`${tomorrow.getFullYear()}-${String(tomorrow.getMonth()+1).padStart(2,'0')}-${String(tomorrow.getDate()).padStart(2,'0')}`;const due=String(r.data.dueDate||'');const periodPass=module!=='tasks'||period==='records'||(period==='today'&&(!due||due<=today()&&r.data.status!=='Done'||due===today()))||(period==='tomorrow'&&due===next);const remaining=String(r.data.warrantyUntil||'')?Math.ceil((Date.parse(String(r.data.warrantyUntil)+'T00:00:00Z')-Date.parse(today()+'T00:00:00Z'))/86400000):Infinity;
     const datePass=module!=='tasks'||period!=='records'||((!fromDate||due>=fromDate)&&(!toDate||due<=toDate));
     const inventoryPass=module!=='inventory'||inventoryFilter==='all'||(inventoryFilter==='expired'&&remaining<0)||(inventoryFilter==='expiring'&&remaining>=0&&remaining<=90)||(inventoryFilter.startsWith('category:')&&String(r.data.category||'')===inventoryFilter.slice(9));
@@ -214,7 +238,7 @@ function ModuleScreen({module,site,user,action,notify,openNewToken}:{module:Modu
   const next={...r.data,...patch};
   setPendingIds(v=>[...v,r.id]);
   setRecords(v=>v.map(x=>x.id===r.id?{...x,data:next}:x));
-  try{await api('records.save',{module,siteId:site.id,record:{id:r.id,data:next}});await refresh()}
+  try{await api('records.save',{module,siteId:site.id,record:{id:r.id,version:r.version,data:next}});await refresh()}
   catch(e){setRecords(v=>v.map(x=>x.id===r.id?r:x));notify(err(e),true);throw e}
   finally{setPendingIds(v=>v.filter(id=>id!==r.id))}
  }
@@ -231,7 +255,7 @@ function ModuleScreen({module,site,user,action,notify,openNewToken}:{module:Modu
  const quietMutate=async(fn:()=>Promise<unknown>,message?:string)=>{try{await fn();if(message)notify(tr(message))}catch(e){notify(err(e),true)}};
  async function exportExcel(){await action(async()=>{const result=await api<{cancelled?:boolean}>('reports.export',{module,siteId:site.id,columns:spec.fields.filter(f=>f.type!=='textarea').map(f=>f.key),ids:filtered.map(r=>r.id),labels:Object.fromEntries(spec.fields.map(f=>[f.key,tr(f.label)]))});if(!result.cancelled)notify(tr('Đã xuất file Excel thành công.'))})}
  async function remove(r:RecordItem){if(!window.confirm(`Xóa ${tr(spec.singular)} "${firstTitle(r)}"? Hành động này không thể hoàn tác.`))return;await action(async()=>{await api('records.delete',{module,siteId:site.id,id:r.id});await refresh()},'Đã xóa bản ghi.')}
- async function save(form:Record<string,string|number|boolean|undefined>){await action(async()=>{await api('records.save',{module,siteId:site.id,record:{id:editing?.id,data:form}});setEditing(undefined);await refresh()},'Đã lưu dữ liệu thành công.')}
+ async function save(form:Record<string,string|number|boolean|undefined>){await action(async()=>{await api('records.save',{module,siteId:site.id,record:{id:editing?.id,version:editing?.version,data:form}});setEditing(undefined);await refresh()},'Đã lưu dữ liệu thành công.')}
  async function qrRecord(r:RecordItem){const code=String(r.data.assetCode||r.id);const src=await QRCode.toDataURL(JSON.stringify({app:'Lotus IT Command',siteCode:site.code,assetCode:code}),{width:240,margin:2});setQrView({code,name:firstTitle(r),src})}
  async function printQrs(){await action(async()=>{await api('qr.print',{siteId:site.id,ids:selected});setSelected([])},'Đã mở cửa sổ tem QR. Nhấn Ctrl+P để in.')}
  function displayCell(r:RecordItem,key:string){const v=key==='effectiveEndDate'?r.effectiveEndDate:r.data[key];if(key==='status'||key==='priority')return <Badge text={v}/>;if(key.toLowerCase().includes('date')||key==='checkedAt'||key==='warrantyUntil'||key==='updatedAt')return dateNice(v);if(['budget','actual','unitPrice','purchasePrice','amount'].includes(key))return nfmt(v);return translateLocaleValue(v??'—')||'—'}
@@ -313,7 +337,7 @@ function AuditScreen({site}:{site:Site}){
 function SettingsScreen({site,action}:{site:Site;action:(fn:()=>Promise<unknown>,msg?:string)=>Promise<void>}){
  const [categories,setCategories]=useState(''),[shift,setShift]=useState(''),[templates,setTemplates]=useState('');
  const [payrollDay,setPayrollDay]=useState('1'),[payrollCycles,setPayrollCycles]=useState<Record<string,{startDay:number}>>({});
- const load=useCallback(async()=>{const x=await api<Record<string,any>>('settings.get');setCategories((x.categories||['PMS','POS','Server','NAS','Network','Backup','Printer']).join('\n'));setShift((x.shiftTypes||[{code:'D',factor:1},{code:'N',factor:1},{code:'HD',factor:0.5},{code:'AL',factor:0},{code:'DO',factor:0}]).map((v:{code:string;factor:number})=>`${v.code}|${v.factor}`).join('\n'));setTemplates((x.checklistTemplates||[{name:'Kiểm tra Backup',frequency:'Daily'},{name:'Kiểm tra NAS / Server',frequency:'Daily'}]).map((v:{name:string;frequency:string})=>`${v.name}|${v.frequency}`).join('\n'));setPayrollCycles(x.payrollCycles||{});setPayrollDay(String(x.payrollCycles?.[site.id]?.startDay||1))},[site.id]);
+ const load=useCallback(async()=>{const x=await api<Record<string,any>>('settings.get',{siteId:site.id});setCategories((x.categories||['PMS','POS','Server','NAS','Network','Backup','Printer']).join('\n'));setShift((x.shiftTypes||[{code:'D',factor:1},{code:'N',factor:1},{code:'HD',factor:0.5},{code:'AL',factor:0},{code:'DO',factor:0}]).map((v:{code:string;factor:number})=>`${v.code}|${v.factor}`).join('\n'));setTemplates((x.checklistTemplates||[{name:'Kiểm tra Backup',frequency:'Daily'},{name:'Kiểm tra NAS / Server',frequency:'Daily'}]).map((v:{name:string;frequency:string})=>`${v.name}|${v.frequency}`).join('\n'));setPayrollCycles(x.payrollCycles||{});setPayrollDay(String(x.payrollCycles?.[site.id]?.startDay||1))},[site.id]);
  useEffect(()=>{void load()},[load]);
  async function save(){await action(async()=>{const shiftTypes=shift.split('\n').map(x=>x.split('|')).filter(x=>x.length===2).map(([code,factor])=>({code:code.trim(),factor:Number(factor)}));const checklistTemplates=templates.split('\n').map(x=>x.split('|')).filter(x=>x.length===2).map(([name,frequency])=>({name:name.trim(),frequency:frequency.trim()}));await api('settings.save',{key:'categories',value:categories.split('\n').map(x=>x.trim()).filter(Boolean)});await api('settings.save',{key:'shiftTypes',value:shiftTypes});await api('settings.save',{key:'checklistTemplates',value:checklistTemplates});await api('settings.save',{key:'payrollCycles',value:{...payrollCycles,[site.id]:{startDay:Number(payrollDay)}}});await load()},'Đã lưu cấu hình hệ thống.')}
  return <><PageHead title={tr("System Settings")} desc={tr("Thiết lập danh mục sử dụng chung, mã ca làm việc và mẫu kiểm tra.")} actions={<button className="btn primary" onClick={save}><Save size={16}/>{tr("Lưu cấu hình")}</button>}/><div className="settings-grid"><div className="panel settings-card"><div className="settings-icon"><SlidersHorizontal/></div><h3>{tr("Danh mục hệ thống")}</h3><p>{tr("Mỗi dòng một danh mục. Có thể sử dụng làm danh sách tham chiếu khi mở rộng phần mềm.")}</p><textarea value={categories} onChange={e=>setCategories(e.target.value)} rows={10}/></div><div className="panel settings-card"><div className="settings-icon"><CalendarDays/></div><h3>{tr("Mã ca làm việc")}</h3><p>{tr("Định dạng Mã ca | Hệ số công (ví dụ: HD|0.5). Các mã ca đang có trong màn Roster là mặc định.")}</p><textarea value={shift} onChange={e=>setShift(e.target.value)} rows={10}/></div><div className="panel settings-card"><div className="settings-icon"><ClipboardList/></div><h3>{tr("Mẫu Checklist")}</h3><p>{tr("Định dạng Tên mẫu | Chu kỳ (Daily / Weekly / Monthly / Quarterly / Semiannual / Yearly / Custom). Các mẫu sẽ hiện tự động theo kỳ trên bảng Checklist.")}</p><textarea value={templates} onChange={e=>setTemplates(e.target.value)} rows={10}/></div><div className="panel settings-card"><div className="settings-icon"><CalendarDays/></div><h3>{tr("Chu kỳ tính công")}</h3><p>{tr("Chọn ngày bắt đầu kỳ công cho khách sạn hiện tại. Ví dụ: kỳ tháng 5 với chu kỳ 21–20 là 21/04 đến 20/05.")}</p><label className="field"><span>{tr("Cơ sở hiện tại")}: {site.name}</span><select value={payrollDay} onChange={e=>setPayrollDay(e.target.value)}>{[['1','1 – Cuối tháng'],['21','21 – 20'],['25','25 – 24'],['26','26 – 25']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label></div><div className="panel settings-card"><div className="settings-icon"><ShieldCheck/></div><h3>{tr("Thiết lập dữ liệu")}</h3><p>{tr("Giới hạn tệp đính kèm: 10 MB. Cho phép ảnh, PDF, Word, Excel, TXT, WEBP.")}</p><div className="config-line"><span>{tr("Database engine")}</span><strong>SQLite (sql.js)</strong></div><div className="config-line"><span>{tr("Storage")}</span><strong>{tr("Offline / Local")}</strong></div><div className="config-line"><span>{tr("Security")}</span><strong>{tr("scrypt password hash")}</strong></div><div className="config-line"><span>{tr("Tài khoản quản trị")}</span><strong>{tr("Role-based")}</strong></div></div></div></>;
