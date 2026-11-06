@@ -33,3 +33,11 @@
 
 /* Annual P&L financial grid */
 .financial-grid{min-width:1500px;font-variant-numeric:tabular-nums}.financial-grid th,.financial-grid td{white-space:nowrap}.financial-grid thead th small{display:block;font-size:10px;opacity:.65;font-weight:400}.pl-cell{display:flex;flex-direction:column;gap:3px;min-width:74px;font-size:11px;text-align:right}.pl-cell span:first-child{color:var(--muted,#667085)}.pl-cell .over-budget,.financial-grid .over-budget{color:#ce3f49;font-weight:700}.pl-cell .under-budget,.financial-grid .under-budget{color:#238a6b}.pl-total{background:rgba(43,91,164,.08);font-weight:700}.financial-grid tbody th{text-align:left}
+
+/* Explicitly show which database the login is using. No implicit migration. */
+.connection-config{display:flex;flex-direction:column;gap:10px;margin:15px 0 12px;padding:12px;border:1px solid var(--line,#e2e8f0);border-radius:12px;background:rgba(240,246,255,.55)}
+.connection-config .connection-switch{display:flex;gap:14px;flex-wrap:wrap}
+.connection-config .connection-switch label{font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:600}
+.connection-config input[type=url]{display:block;width:100%;min-width:0;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:white;padding:9px 10px;font-size:13px}
+.connection-config small{font-size:11px;line-height:1.5;color:var(--muted,#64748b)}
+.connection-web-label{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px}
