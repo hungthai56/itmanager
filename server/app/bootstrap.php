@@ -73,7 +73,7 @@ function secureHeaders(): void {
     header('X-Frame-Options: DENY');header('Cache-Control: no-store, private');
     header("Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     header('Permissions-Policy: camera=(),microphone=(),geolocation=()');
-    if (($_SERVER['HTTPS'] ?? '') === 'on') header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    if (($_SERVER['HTTPS'] ?? '') === 'on') header('Strict-Transport-Security: max-age=31536000');
 }
 function enforceHttps(): void {
     // Configure HTTPS at the reverse proxy. Never trust client-supplied X-Forwarded-* headers.

@@ -11,12 +11,12 @@
 
 ## Cài đặt PHP/MySQL (cPanel hoặc VPS)
 
-1. Tạo MySQL database và **user chỉ được truy cập database đó**, không có quyền SUPER/FILE/GRANT. Bảo đảm kết nối DB nội bộ (127.0.0.1/socket). Không bật Remote MySQL.
+1. Tạo MySQL database; dùng **user quản trị triển khai** để chạy schema (CREATE/ALTER), sau đó chuyển cấu hình PHP runtime sang **user chỉ có SELECT/INSERT/UPDATE/DELETE** trên database này (không cấp SUPER/FILE/GRANT/DROP cho tài khoản runtime). Bảo đảm kết nối DB nội bộ (127.0.0.1/socket). Không bật Remote MySQL.
 2. Sử dụng PHP 8.3+ với `pdo_mysql`, `openssl`, `json` và Argon2id; chạy `php server/bin/doctor.php` qua CLI.
 3. **DocumentRoot phải trỏ tới `server/public`**, không được trỏ tới thư mục chứa `app/`, `bin/`, `config.local.php`, `database/`. Để trên hosting, cấu hình subdomain root đúng thư mục; không upload toàn bộ repository vào `public_html`.
 4. Đặt biến môi trường `LOTUS_DB_HOST`, `LOTUS_DB_PORT`, `LOTUS_DB_NAME`, `LOTUS_DB_USER`, `LOTUS_DB_PASSWORD` qua panel hosting; hoặc tạo `server/config.local.php` (bên ngoài public) theo file mẫu. Dùng mật khẩu ngẫu nhiên mạnh. **Không commit bí mật vào GitHub.**
-5. HTTPS chứng chỉ hợp lệ, chặn HTTP, HSTS, tường lửa, cập nhật PHP/MySQL và webserver. Nếu đứng sau reverse proxy, cấu hình HTTPS thực tại webserver upstream; bản mặc định không tin `X-Forwarded-Proto` tự gửi từ client.
-6. Chạy `php server/bin/setup.php` từ CLI để tạo bảng và SYS đầu tiên. Không expose `setup.php` ra web. Đăng nhập và tạo SYS dự phòng.
+5. HTTPS chứng chỉ hợp lệ, chặn HTTP, HSTS cho riêng host API, tường lửa, cập nhật PHP/MySQL và webserver. Nếu đứng sau reverse proxy, cấu hình HTTPS thực tại webserver upstream; bản mặc định không tin `X-Forwarded-Proto` tự gửi từ client.
+6. Chạy `php server/bin/setup.php` từ CLI để tạo bảng và SYS đầu tiên. Không expose `setup.php` ra web. Đăng nhập và tạo SYS dự phòng. Nếu cả SYS bị khóa, quản trị viên máy chủ chạy `php server/bin/unlock-account.php` qua CLI từ thư mục server (tuyệt đối không mở endpoint HTTP này).
 7. Sau khi chạy `npm ci && npm run build:web` từ repo, copy toàn bộ nội dung `server/public` tới document root đúng cấu trúc `/app/` và `/api/v1/dispatch`. Không cho phép PHP trong `/app`.
 8. Kiểm tra `https://your-domain/api/v1/health` trả về `{ok:true,service:"Lotus IT API"}`; mở `https://your-domain/app/` để đăng nhập.
 9. Trong Electron, vào màn hình đăng nhập, chọn kết nối máy chủ và nhập **đúng tên miền HTTPS**. Mỗi máy đăng nhập tài khoản được cấp; không chia sẻ tài khoản.

@@ -28,3 +28,5 @@
 - File upload security: size/extension/MIME/content validation, AV scanning, path traversal protections, private file storage with permission checks.
 - Automated integration tests against MySQL for all roles/site separation, concurrent updates, secure bootstrap; human user acceptance and load tests.
 - Third-party dependency auditing, signed installers, secrets review and protected branches on GitHub.
+
+**Emergency admin unlock:** only through `php server/bin/unlock-account.php` on a trusted server shell. Never expose password reset/unlock over public unauthenticated HTTP.
