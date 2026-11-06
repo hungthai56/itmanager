@@ -11,9 +11,11 @@ let win;
 const isDev=!!process.env.VITE_DEV_SERVER_URL;
 const safeName=name=>String(name||'attachment').replace(/[^a-zA-Z0-9._-]/g,'_').slice(0,100);
 function startWindow(){
-  win=new BrowserWindow({width:1440,height:900,minWidth:1000,minHeight:670,backgroundColor:'#F5F7FB',title:'Lotus IT Command',icon:path.join(__dirname,'../assets/icon.png'),autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:false,webSecurity:true}});
+  win=new BrowserWindow({width:1440,height:900,minWidth:1000,minHeight:670,backgroundColor:'#F5F7FB',title:'Lotus IT Command',icon:path.join(__dirname,'../assets/icon.png'),autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true}});
   if(isDev)win.loadURL(process.env.VITE_DEV_SERVER_URL);else win.loadFile(path.join(__dirname,'../dist/index.html'));
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+  win.webContents.session.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
+  win.webContents.session.setPermissionCheckHandler(()=>false);
   win.webContents.on('will-navigate',(e,url)=>{if(url!==win.webContents.getURL())e.preventDefault();});
 }
 async function dispatch(action,p){
