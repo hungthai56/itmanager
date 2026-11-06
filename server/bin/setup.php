@@ -6,7 +6,8 @@ if(!defined('PASSWORD_ARGON2ID')){fwrite(STDERR,"PHP must support Argon2id.\n");
 $pdo=db();
 $schema=file_get_contents(dirname(__DIR__).'/database/schema.sql');
 if($schema===false){fwrite(STDERR,"Cannot read schema\n");exit(1);}
-foreach(explode(';',$schema) as $statement){$statement=preg_replace('/^--.*$/m','',trim($statement));if(trim($statement)!=='')$pdo->exec($statement);}
+$schema=preg_replace('/^\s*--[^\n]*$/m','',$schema);
+foreach(explode(';',$schema) as $statement){if(trim($statement)!=='')$pdo->exec(trim($statement));}
 $exists=(int)query('SELECT COUNT(*) n FROM users')->fetch()['n'];
 if($exists){echo "Database initialized; an administrator already exists. No credentials changed.\n";exit(0);}
 function ask(string $prompt):string {fwrite(STDOUT,$prompt);return trim((string)fgets(STDIN));}
