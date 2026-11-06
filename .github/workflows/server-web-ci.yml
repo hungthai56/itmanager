@@ -1,0 +1,72 @@
+name: Server API checks and web build
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'src/**'
+      - '.github/workflows/server-web-ci.yml'
+      - 'package.json'
+      - 'index.html'
+      - 'vite.config.ts'
+  workflow_dispatch:
+
+jobs:
+  php-mysql-integration:
+    name: PHP lint, auth and multi-site integration
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: lotus_ci
+          MYSQL_USER: lotus_ci
+          MYSQL_PASSWORD: CI_only_local_password
+          MYSQL_ROOT_PASSWORD: CI_root_only_local_password
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=10s --health-timeout=5s --health-retries=15
+    env:
+      LOTUS_DB_HOST: 127.0.0.1
+      LOTUS_DB_PORT: '3306'
+      LOTUS_DB_NAME: lotus_ci
+      LOTUS_DB_USER: lotus_ci
+      LOTUS_DB_PASSWORD: CI_only_local_password
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP runtime and PDO MySQL
+        run: |
+          php -v
+          sudo apt-get update -qq
+          sudo apt-get install -y php-mysql
+          php -m | grep -i pdo_mysql
+      - name: Lint every API PHP file
+        run: find server -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Bootstrap isolated test database
+        run: |
+          php server/bin/doctor.php
+          printf 'CI Hotel\nciadmin\nCI Admin\nCIPassword_123456\n' | php server/bin/setup.php
+      - name: Test token handling, site isolation, version conflicts, and roles
+        run: php server/tests/integration.php
+  web-bundle:
+    name: Build static React web portal + PHP deployment package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build browser app
+        run: |
+          npm install --no-audit --no-fund
+          npm run build:web
+      - name: Create deployable server archive (no secrets)
+        run: |
+          test -f server/public/app/index.html
+          zip -qr lotus-it-web-v06.zip server -x 'server/config.local.php' 'server/.env' 'server/storage/*'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lotus-IT-Command-PHP-MySQL-Web
+          path: lotus-it-web-v06.zip
+          retention-days: 14
