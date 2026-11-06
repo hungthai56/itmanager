@@ -84,7 +84,7 @@ export function RosterCalendar({site,records,config,editable,mutate,refresh,noti
  </section>;
 }
 
-type ProjectTask={id:string;site_id:string;project_id:string;title:string;owner:string;due_date:string;status:'Not Started'|'In Progress'|'Blocked'|'Done';notes:string;updated_at:string};
+type ProjectTask={id:string;site_id:string;project_id:string;version?:number;title:string;owner:string;due_date:string;status:'Not Started'|'In Progress'|'Blocked'|'Done';notes:string;updated_at:string};
 const blankTask={title:'',owner:'',due_date:'',status:'Not Started' as const,notes:''};
 export function ProjectRegistry({site,records,editable,mutate,refresh,notify}:{site:Site;records:RecordItem[];editable:boolean;mutate:Mutate;refresh:()=>Promise<void>;notify:Notify}){
  const [chosen,setChosen]=useState('');const project=records.find(p=>p.id===chosen)||records[0];
@@ -106,7 +106,7 @@ export function ProjectRegistry({site,records,editable,mutate,refresh,notify}:{s
    catch(e){notify(safeMessage(e),true)}finally{setQuickStatusId(null)}
  }
  async function remove(id:string){if(!project||!window.confirm(tr('Xóa đầu việc này?')))return;
-    await mutate(async()=>{await invoke('project.tasks.delete',{siteId:site.id,projectId:project.id,id});await load();await refresh()},'Đã xóa đầu việc.');
+    await mutate(async()=>{await invoke('project.tasks.delete',{siteId:site.id,projectId:project.id,id,version:tasks.find(t=>t.id===id)?.version});await load();await refresh()},'Đã xóa đầu việc.');
  }
  const completed=tasks.filter(t=>t.status==='Done').length;
  return <section className="panel feature-board"><div className="feature-header"><div className="feature-icon"><CheckCircle2 size={20}/></div><div><h3>{tr("Project Task Registry")}</h3><p>{tr("Chia dự án thành các đầu việc, chỉ định người phụ trách và tự động cập nhật % hoàn thành.")}</p></div><span className="feature-stat">{completed}/{tasks.length} đầu việc</span></div>
@@ -128,7 +128,7 @@ export function RecordHistory({site,module,record,onClose,notify}:{site:Site;mod
 }
 
 type Addendum={
- id:string;contract_id:string;site_id:string;addendum_no:string;signed_date:string;new_start_date:string;
+ id:string;contract_id:string;site_id:string;version?:number;addendum_no:string;signed_date:string;new_start_date:string;
  new_end_date:string;amount:number;summary:string;created_at:string
 };
 const emptyAddendum={addendum_no:'',signed_date:'',new_start_date:'',new_end_date:'',amount:0,summary:''};
@@ -154,7 +154,7 @@ export function ContractAddenda({site,records,editable,mutate,refresh,notify}:{
  }
  async function remove(id:string){
   if(!contractId||!window.confirm(tr('Bạn có chắc muốn xóa phụ lục này?')))return;
-  await mutate(async()=>{await invoke('contract.addenda.delete',{siteId:site.id,contractId,id});await load();await refresh()},'Đã xóa phụ lục.');
+  await mutate(async()=>{await invoke('contract.addenda.delete',{siteId:site.id,contractId,id,version:addenda.find(a=>a.id===id)?.version});await load();await refresh()},'Đã xóa phụ lục.');
  }
  return <section className="panel feature-board">
    <div className="feature-header"><div className="feature-icon"><CalendarRange size={20}/></div>
