@@ -1,8 +1,10 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/Auth.php';
+require_once __DIR__.'/ApiRecords.php';
 
 final class Api {
+    use ApiRecords;
     private Auth $auth;
     private const STATUS = ['tasks'=>['Open','In Progress','Done'], 'inventory'=>['Active','Spare','Maintenance','Retired']];
     private const FIELDS = [
