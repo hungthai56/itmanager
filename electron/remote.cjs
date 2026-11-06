@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
+const {isIP}=require('node:net');
 
 /** Auth tokens are deliberately kept in main-process memory, never in renderer/localStorage. */
 class RemoteBridge {
@@ -16,7 +17,7 @@ class RemoteBridge {
     const url=new URL(text.trim());
     if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/'||url.port&&!/^(443)$/.test(url.port))
       throw Error('API bắt buộc dùng HTTPS, chỉ nhập tên miền gốc (không có đường dẫn).');
-    if(!/^[a-z0-9.-]+$/i.test(url.hostname)||url.hostname==='localhost'||url.hostname.endsWith('.local'))
+    if(!/^[a-z0-9.-]+$/i.test(url.hostname)||url.hostname==='localhost'||url.hostname.endsWith('.local')||isIP(url.hostname)!==0)
       throw Error('Hãy dùng tên miền HTTPS hợp lệ cho máy chủ.');
     return url.origin;
   }
@@ -54,7 +55,11 @@ class RemoteBridge {
     if(!this.enabled)throw Error('Chế độ máy chủ chưa được bật.');
     if(action==='app.info')return {version:'0.6.0',mode:'server',url:this.url};
     if(action==='auth.setup')throw Error('Máy chủ chỉ được khởi tạo bằng công cụ quản trị CLI.');
-    if(action==='auth.status'&&!this.token)return {authenticated:false,ready:true};
+    if(action==='auth.status'){
+      if(!this.token)return {authenticated:false,ready:true};
+      try{return await this.request(action,payload)}
+      catch(e){if(!this.token)return {authenticated:false,ready:true};throw e}
+    }
     if(action==='auth.login') {
       const result=await this.request(action,payload);
       if(typeof result.bearerToken!=='string'||!/^[0-9a-f]{64}$/i.test(result.bearerToken))throw Error('Phiên đăng nhập không hợp lệ.');
