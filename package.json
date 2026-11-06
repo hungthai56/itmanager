@@ -1,6 +1,6 @@
 {
   "name": "lotus-it-command",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Offline-first hotel IT operations desktop suite",
   "author": "Lotus IT",
@@ -67,6 +67,9 @@
     }
   },
   "overrides": {
-    "electron-to-chromium": "1.5.477"
+    "electron-to-chromium": "1.5.477",
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
   }
 }

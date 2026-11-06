@@ -1,3 +1,5 @@
+> **Phiên bản 0.6.2 — PHP/MySQL và web pilot.** Bao gồm sửa lỗi Dashboard `inDays` từ v0.6.1; siết yêu cầu đổi mật khẩu, thu hồi phiên web khi đổi/reset mật khẩu, giới hạn đăng nhập đúng múi giờ và chống xóa bản ghi từ màn hình cũ. Hướng dẫn cPanel hiện tại: [CPANEL_STAGING_VI.md](docs/CPANEL_STAGING_VI.md). Các mục phiên bản bên dưới ghi lại lịch sử tính năng; trạng thái online hiện tại ở [server/README.md](server/README.md).
+
 > **Phiên bản 0.5.0 — Spec audit & core operations.** Khóa tài khoản yêu cầu Admin mở khóa, phân cấp quyền Supervisor theo reporting line, sửa lỗi cập nhật hàng loạt, Roster theo kỳ công Site và CAPEX Deferred. Xem `docs/FEATURE_AUDIT_V05.md` về các phần còn thiếu.
 
 > **Phiên bản 0.4.0 — Quick Workflow.** Giảm số bước trong Daily Tasks, Checklists, Roster, Inventory và Projects, thêm Ctrl+K / Ctrl+N / tìm trong bảng, cập nhật hàng loạt an toàn. Xem [QUICK_WORKFLOW_V04.md](docs/QUICK_WORKFLOW_V04.md).
@@ -6,7 +8,7 @@
 
 # Lotus IT Command — Hotel IT Operations Desktop
 
-**Version 0.2.0 · Electron + React + TypeScript + SQLite (sql.js)**
+**Version 0.6.2 · Electron + React + TypeScript + SQLite offline / PHP + MySQL online**
 
 Đây là **bản nền tảng chạy offline cho một máy Windows**, phát triển theo danh sách chức năng video do người dùng cung cấp. Không phải bản sao 1:1 đã hoàn thiện. Những điểm đã có và chưa có được ghi rõ bên dưới.
 
