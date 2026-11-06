@@ -65,5 +65,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true
     }
+  },
+  "overrides": {
+    "electron-to-chromium": "1.5.477"
   }
 }
