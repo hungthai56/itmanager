@@ -228,7 +228,7 @@ final class Api {
         $amount=$a['amount']??0;
         if(!$number||!$end||!is_numeric($amount)||!is_finite((float)$amount)||abs((float)$amount)>1e15)throw new ApiError('Invalid addendum',422);
         return transactional(function()use($id,$site,$contract,$a,$number,$signed,$start,$end,$amount,$parent){
-            $old=query('SELECT id FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=? FOR UPDATE',[$id,$site,$contract])->fetch();
+            $old=query('SELECT id,version FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=? FOR UPDATE',[$id,$site,$contract])->fetch();
             if(!empty($a['id'])&&!$old)throw new ApiError('Addendum not found',404);
             if($old&&(!isset($a['version'])||(int)$a['version']!==(int)$old['version']))throw new ApiError('Addendum changed on another device. Refresh and retry.',409);
             $values=[$number,$signed,$start,$end,(float)$amount,$this->payload($a,'summary',5000)];
