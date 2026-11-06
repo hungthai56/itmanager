@@ -69,14 +69,14 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS project_tasks (
   id CHAR(36) PRIMARY KEY, site_id CHAR(36) NOT NULL, project_id CHAR(36) NOT NULL,
   title VARCHAR(250) NOT NULL, owner VARCHAR(150) NOT NULL DEFAULT '', due_date DATE NULL,
-  status VARCHAR(30) NOT NULL DEFAULT 'Not Started', notes TEXT NULL, created_by CHAR(36) NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'Not Started', version INT UNSIGNED NOT NULL DEFAULT 1, notes TEXT NULL, created_by CHAR(36) NOT NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   INDEX ix_project_tasks_scope (site_id,project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE IF NOT EXISTS contract_addenda (
   id CHAR(36) PRIMARY KEY, site_id CHAR(36) NOT NULL, contract_id CHAR(36) NOT NULL,
   addendum_no VARCHAR(120) NOT NULL, signed_date DATE NULL, new_start_date DATE NULL,
-  new_end_date DATE NOT NULL, amount DECIMAL(18,2) NOT NULL DEFAULT 0, summary TEXT,
+  new_end_date DATE NOT NULL, amount DECIMAL(18,2) NOT NULL DEFAULT 0, summary TEXT, version INT UNSIGNED NOT NULL DEFAULT 1,
   created_by CHAR(36) NOT NULL, created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   INDEX ix_addenda_scope (site_id,contract_id,new_end_date)

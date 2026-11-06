@@ -28,7 +28,7 @@ Chưa có tự động upload/import. SQLite cũ vẫn nằm trên máy, độc 
 ## Những chức năng cần hoàn thiện trước triển khai thực tế
 
 - Chưa có: MFA (TOTP/FIDO2), quản trị phiên theo thiết bị, đăng nhập SSO, tập tin/chứng từ và QR đọc web, import SQLite lên MySQL có kiểm tra, báo cáo Excel trực tuyến, backup cả file đính kèm, SSE/WebSocket real-time. Bản online hiện đồng bộ theo các lượt đọc/lưu và nút Làm mới, không phát sự kiện realtime.
-- API có kiểm tra quyền tại server và version chống ghi đè cho **records**, nhưng bảng `project_tasks`, `contract_addenda` chưa có version concurrency riêng.
+- API có kiểm tra quyền tại server và version chống ghi đè cho **records**, và bổ sung version riêng cho `project_tasks`, `contract_addenda`; riêng upload file và hàng đợi offline chưa triển khai.
 - Chưa kiểm thử tải lớn, phục hồi sau lỗi ổ đĩa, failover, active-active. Với dữ liệu quan trọng cần UPS, backup DB mã hóa, PITR binlog, restore drill định kỳ, giám sát lỗi, kiểm tra quyền filesystem, WAF/rate limiting ngoài ứng dụng, logging tập trung và penetration test độc lập.
 - Hosting shared cPanel có thể thiếu quyền điều chỉnh PHP/webserver/MySQL/binlog, cron và chính sách session. Nếu không đáp ứng các điều kiện trên, nên dùng VPS hoặc hạ tầng quản trị có backup/giám sát thực tế.
 

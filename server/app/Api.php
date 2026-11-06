@@ -195,8 +195,9 @@ final class Api {
         return transactional(function()use($id,$site,$project,$data,$title,$status,$due){
             $old=query('SELECT * FROM project_tasks WHERE id=? AND site_id=? AND project_id=? FOR UPDATE',[$id,$site,$project])->fetch();
             if(!empty($data['id'])&&!$old)throw new ApiError('Task not found',404);
+            if($old&&(!isset($data['version'])||(int)$data['version']!==(int)$old['version']))throw new ApiError('Task changed on another device. Refresh and retry.',409);
             $values=[$title,$this->payload($data,'owner',150),$due,$status,$this->payload($data,'notes',2000)];
-            if($old)query('UPDATE project_tasks SET title=?,owner=?,due_date=?,status=?,notes=?,updated_at=UTC_TIMESTAMP(6) WHERE id=? AND site_id=? AND project_id=?',[...$values,$id,$site,$project]);
+            if($old)query('UPDATE project_tasks SET title=?,owner=?,due_date=?,status=?,notes=?,version=version+1,updated_at=UTC_TIMESTAMP(6) WHERE id=? AND site_id=? AND project_id=?',[...$values,$id,$site,$project]);
             else query('INSERT INTO project_tasks(id,site_id,project_id,title,owner,due_date,status,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?)',[$id,$site,$project,...$values,$this->auth->principal()['id']]);
             $this->projectProgress($site,$project);audit($this->auth->principal(),'PROJECT_TASK_SAVE',$site,['projectId'=>$project,'id'=>$id]);
             return ['id'=>$id];
@@ -205,9 +206,10 @@ final class Api {
     private function projectTaskDelete(array $p): array {
         $site=$this->site($p);$this->auth->module('projects',$site,'write');$project=$this->payload($p,'projectId',36);$id=$this->payload($p,'id',36);
         $this->auth->manageRecord($this->record('projects',$site,$project),'projects');
-        return transactional(function()use($site,$project,$id){
-            $row=query('SELECT id FROM project_tasks WHERE id=? AND project_id=? AND site_id=? FOR UPDATE',[$id,$project,$site])->fetch();
+        return transactional(function()use($site,$project,$id,$p){
+            $row=query('SELECT id,version FROM project_tasks WHERE id=? AND project_id=? AND site_id=? FOR UPDATE',[$id,$project,$site])->fetch();
             if(!$row)throw new ApiError('Task not found',404);
+            if(!isset($p['version'])||(int)$p['version']!==(int)$row['version'])throw new ApiError('Task changed on another device. Refresh and retry.',409);
             query('DELETE FROM project_tasks WHERE id=?',[$id]);$this->projectProgress($site,$project);
             audit($this->auth->principal(),'PROJECT_TASK_DELETE',$site,['id'=>$id]);return ['success'=>true];
         });
@@ -228,8 +230,9 @@ final class Api {
         return transactional(function()use($id,$site,$contract,$a,$number,$signed,$start,$end,$amount,$parent){
             $old=query('SELECT id FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=? FOR UPDATE',[$id,$site,$contract])->fetch();
             if(!empty($a['id'])&&!$old)throw new ApiError('Addendum not found',404);
+            if($old&&(!isset($a['version'])||(int)$a['version']!==(int)$old['version']))throw new ApiError('Addendum changed on another device. Refresh and retry.',409);
             $values=[$number,$signed,$start,$end,(float)$amount,$this->payload($a,'summary',5000)];
-            if($old)query('UPDATE contract_addenda SET addendum_no=?,signed_date=?,new_start_date=?,new_end_date=?,amount=?,summary=?,updated_at=UTC_TIMESTAMP(6) WHERE id=? AND site_id=? AND contract_id=?',[...$values,$id,$site,$contract]);
+            if($old)query('UPDATE contract_addenda SET addendum_no=?,signed_date=?,new_start_date=?,new_end_date=?,amount=?,summary=?,version=version+1,updated_at=UTC_TIMESTAMP(6) WHERE id=? AND site_id=? AND contract_id=?',[...$values,$id,$site,$contract]);
             else query('INSERT INTO contract_addenda(id,site_id,contract_id,addendum_no,signed_date,new_start_date,new_end_date,amount,summary,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)',[$id,$site,$contract,...$values,$this->auth->principal()['id']]);
             audit($this->auth->principal(),'CONTRACT_ADDENDUM_SAVE',$site,['contractId'=>$contract,'id'=>$id]);
             return ['id'=>$id,'effectiveEndDate'=>$this->effectiveEnd($site,$contract,jsonArray($parent['data'])['endDate']??null)];
@@ -238,9 +241,10 @@ final class Api {
     private function addendaDelete(array $p): array {
         $site=$this->site($p);$this->auth->module('contracts',$site,'write');$contract=$this->payload($p,'contractId',36);$id=$this->payload($p,'id',36);
         $this->auth->manageRecord($this->record('contracts',$site,$contract),'contracts');
-        return transactional(function()use($site,$contract,$id){
-            $old=query('SELECT id FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=? FOR UPDATE',[$id,$site,$contract])->fetch();
+        return transactional(function()use($site,$contract,$id,$p){
+            $old=query('SELECT id,version FROM contract_addenda WHERE id=? AND site_id=? AND contract_id=? FOR UPDATE',[$id,$site,$contract])->fetch();
             if(!$old)throw new ApiError('Addendum not found',404);
+            if(!isset($p['version'])||(int)$p['version']!==(int)$old['version'])throw new ApiError('Addendum changed on another device. Refresh and retry.',409);
             query('DELETE FROM contract_addenda WHERE id=?',[$id]);audit($this->auth->principal(),'CONTRACT_ADDENDUM_DELETE',$site,['id'=>$id]);return ['success'=>true];
         });
     }
